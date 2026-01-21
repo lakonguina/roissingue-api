@@ -6,18 +6,19 @@ from sqlmodel import Field, Relationship, Session, SQLModel, create_engine, sele
 
 
 class TokenQuote(SQLModel):
-    chain: int
+    chain_id: int = Field(alias="chainId")
     address: str
 
 
 class Quote(SQLModel):
-    from_: TokenQuote = Field(alias="from")
-    to: TokenQuote = Field()
-    fee: TokenQuote = Field()
+    fromToken: TokenQuote = Field()
+    toToken: TokenQuote = Field()
+    feeToken: TokenQuote = Field()
     from_address: str = Field(alias="fromAddress")
     to_address: str = Field(alias="toAddress")
     slippage: float = Field(default=0.05, ge=0.0, le=1.0)
-    allowed_chains: list[int] = Field(alias="allowedChains", default=[])
+    allow_chains: list[int] = Field(alias="allowChains", default=[])
+    deny_chains: list[int] = Field(alias="denyChains", default=[])
 
 
 class ChainPublic(SQLModel):
