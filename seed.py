@@ -5,16 +5,16 @@ from database import Chain, Token, TokenAddress, engine
 
 def seed_blockchains_and_tokens():
     with Session(engine) as session:
-        ethereum = Chain(id=1, name="Ethereum")
-        base = Chain(id=8453, name="Base")
-        optimism = Chain(id=10, name="Optimism")
+        ethereum = Chain(id=1, name="Ethereum", slug="eth")
+        base = Chain(id=8453, name="Base", slug="base")
+        optimism = Chain(id=10, name="Optimism", slug="optimism")
         blockchains = [ethereum, base, optimism]
         for bln in blockchains:
             session.add(bln)
             session.commit()
             session.refresh(bln)
-        usdc = Token(name="Circle USD", symbol="USDC")
-        weth = Token(name="Wrapped ETH", symbol="WETH")
+        usdc = Token(name="Circle USD", symbol="USDC", slug="circle-usd")
+        weth = Token(name="Wrapped ETH", symbol="WETH", slug="wrapped-ethereum")
         tokens = [usdc, weth]
         for tkn in tokens:
             session.add(tkn)

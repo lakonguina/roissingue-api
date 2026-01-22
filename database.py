@@ -10,10 +10,17 @@ class TokenQuote(SQLModel):
     address: str
 
 
+class TokenQuoteBySlug(SQLModel):
+    slug: str
+
+
 class Quote(SQLModel):
-    fromToken: TokenQuote = Field()
-    toToken: TokenQuote = Field()
-    feeToken: TokenQuote = Field()
+    from_token: TokenQuote = Field(alias="fromToken")
+    to_token: TokenQuote | TokenQuoteBySlug = Field(alias="toToken")
+    fee_token: TokenQuote = Field(alias="feeToken")
+    # TODO: Only numerical accepted
+    amount: str = Field()
+    # TODO: Add `eth_pydantic_types.Address` as type for both `from_address` and `to_address`
     from_address: str = Field(alias="fromAddress")
     to_address: str = Field(alias="toAddress")
     slippage: float = Field(default=0.05, ge=0.0, le=1.0)
@@ -24,6 +31,7 @@ class Quote(SQLModel):
 class ChainPublic(SQLModel):
     id: int | None = Field(default=None, primary_key=True)
     name: str = Field(unique=True)
+    slug: str = Field(unique=True, index=True)
 
 
 class Chain(ChainPublic, table=True):
@@ -34,6 +42,7 @@ class Chain(ChainPublic, table=True):
 class TokenBase(SQLModel):
     name: str = Field(unique=True)
     symbol: str = Field(index=True)
+    slug: str = Field(index=True)
 
 
 class Token(TokenBase, table=True):
