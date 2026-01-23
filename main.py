@@ -21,6 +21,11 @@ from database import (
     get_session,
 )
 from seed import seed_blockchains_and_tokens
+from services.quote_logic import (
+    assert_token_address_exists,
+    assert_token_slug_exists,
+    filter_chains,
+)
 
 app = FastAPI()
 coingecko_client = AsyncCoingecko(
@@ -63,33 +68,20 @@ async def post_quote(
     ],
     session: Session = Depends(get_session),
 ):
+
     tokens_to_check = [quote.from_token, quote.fee_token]
     chains_accepted = set([])
+
     # Check if token exists in the database
     if isinstance(quote.to_token, TokenQuote):
         tokens_to_check.append(quote.to_token)
         chains_accepted.add(quote.to_token.chain_id)
         for token in tokens_to_check:
-            token_in_db = session.exec(
-                select(TokenAddress)
-                .where(TokenAddress.chain_id == token.chain_id)
-                .where(TokenAddress.address == token.address)
-            ).first()
-            if not token_in_db:
-                raise HTTPException(
-                    status_code=404,
-                    detail=f"Token with address {token.address} and chain id {token.chain_id} not found",
-                )
+            assert_token_address_exists(session, token.address, token.chain_id)
+
     elif isinstance(quote.to_token, TokenQuoteBySlug):
-        to_token_in_db = session.exec(
-            select(Token).where(Token.slug == quote.to_token.slug)
-        ).first()
+        to_token_in_db = assert_token_slug_exists(session, quote.to_token.slug)
         chains_accepted.update([addr.chain_id for addr in to_token_in_db.addresses])
-        if not to_token_in_db:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Token with slug {quote.to_token.slug} not found",
-            )
 
         # Check if chain exists in the database
         def are_chains_accepted(chains: list[int]) -> None:
@@ -108,22 +100,18 @@ async def post_quote(
         if quote.deny_chains:
             are_chains_accepted(quote.deny_chains)
         # Add and remove chains from the quote
-        chains_accepted -= quote.deny_chains
-        chains_accepted &= quote.allow_chains
+        chains_accepted = filter_chains(
+            chains_accepted, quote.deny_chains, quote.allow_chains
+        )
         if not chains_accepted:
             raise HTTPException(
                 status_code=404,
                 detail=f"No chains accepted",
             )
+
         # TODO: Implement `allow_swap_providers` and `allow_bridge_providers`
-        """
-        print(
-        resp_coingecko = await coingecko_client.onchain.networks.tokens.pools.get(
-                address=
-                network=
-        )
-        print(resp_coingecko)
-        """
+    return {"message": "test"}
+
     """
     # Check for DEXs with the best liquidity
     response = requests.post(
