@@ -48,14 +48,12 @@ async def post_quote(
                         "chainId": 10,
                         "address": "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",
                     },
-                    "toToken": {
-                        "chainId": 8453,
-                        "address": "0x4200000000000000000000000000000000000006",
-                    },
+                    "toToken": {"slug": "circle-usd"},
                     "feeToken": {
                         "chainId": 10,
                         "address": "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",
                     },
+                    "allowChains": [10, 8453],
                     "amount": "100000",
                     "fromAddress": "0x6eBf2153f931334714984c7F5a8E574207927Cc7",
                     "toAddress": "0x6eBf2153f931334714984c7F5a8E574207927Cc7",
@@ -66,8 +64,11 @@ async def post_quote(
     session: Session = Depends(get_session),
 ):
     tokens_to_check = [quote.from_token, quote.fee_token]
+    chains_accepted = set([])
+    # Check if token exists in the database
     if isinstance(quote.to_token, TokenQuote):
         tokens_to_check.append(quote.to_token)
+        chains_accepted.add(quote.to_token.chain_id)
         for token in tokens_to_check:
             token_in_db = session.exec(
                 select(TokenAddress)
@@ -83,20 +84,46 @@ async def post_quote(
         to_token_in_db = session.exec(
             select(Token).where(Token.slug == quote.to_token.slug)
         ).first()
+        chains_accepted.update([addr.chain_id for addr in to_token_in_db.addresses])
         if not to_token_in_db:
             raise HTTPException(
                 status_code=404,
                 detail=f"Token with slug {quote.to_token.slug} not found",
             )
 
-    for chain_id in quote.allow_chains + quote.deny_chains:
-        chain_db = session.exec(select(Chain).where(Chain.slug == chain_id)).first()
-        if not chain_db:
+        # Check if chain exists in the database
+        def are_chains_accepted(chains: list[int]) -> None:
+            for chain_id in chains:
+                chain_db = session.exec(
+                    select(Chain).where(Chain.id == chain_id)
+                ).first()
+                if not chain_db:
+                    raise HTTPException(
+                        status_code=404,
+                        detail=f"Chain with id {chain_id} not found",
+                    )
+
+        if quote.allow_chains:
+            are_chains_accepted(quote.allow_chains)
+        if quote.deny_chains:
+            are_chains_accepted(quote.deny_chains)
+        # Add and remove chains from the quote
+        chains_accepted -= quote.deny_chains
+        chains_accepted &= quote.allow_chains
+        if not chains_accepted:
             raise HTTPException(
                 status_code=404,
-                detail=f"Token with address {token.address} and chain id {token.chain_id} not found.",
+                detail=f"No chains accepted",
             )
-
+        # TODO: Implement `allow_swap_providers` and `allow_bridge_providers`
+        """
+        print(
+        resp_coingecko = await coingecko_client.onchain.networks.tokens.pools.get(
+                address=
+                network=
+        )
+        print(resp_coingecko)
+        """
     """
     # Check for DEXs with the best liquidity
     response = requests.post(

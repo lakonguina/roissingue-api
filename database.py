@@ -24,8 +24,11 @@ class Quote(SQLModel):
     from_address: str = Field(alias="fromAddress")
     to_address: str = Field(alias="toAddress")
     slippage: float = Field(default=0.05, ge=0.0, le=1.0)
-    allow_chains: list[int] = Field(alias="allowChains", default=[])
-    deny_chains: list[int] = Field(alias="denyChains", default=[])
+    allow_chains: set[int] = Field(alias="allowChains", default=set([]))
+    deny_chains: set[int] = Field(alias="denyChains", default=set([]))
+    # TODO: Implement this with verification
+    allow_swap_providers: str = Field(alias="allowSwapProviders", default="")
+    allow_bridge_providers: str = Field(alias="allowBridgeProviders", default="")
 
 
 class ChainPublic(SQLModel):
