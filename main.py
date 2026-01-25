@@ -1,7 +1,8 @@
+import asyncio
 import os
 from typing import Annotated
 
-import requests
+import httpx
 from coingecko_sdk import AsyncCoingecko
 from fastapi import Body, Depends, FastAPI, HTTPException
 from pydantic import BaseModel
@@ -25,7 +26,12 @@ from services.quote_logic import (
     assert_token_address_exists,
     assert_token_slug_exists,
     filter_chains,
+    get_best_output,
+    quote_biconomy,
 )
+
+BICONOMY_URL = "https://api.biconomy.io/v1/quote"
+BICONOMY_HEADERS = {"Content-Type": "application/json"}
 
 app = FastAPI()
 coingecko_client = AsyncCoingecko(
@@ -68,16 +74,36 @@ async def post_quote(
     ],
     session: Session = Depends(get_session),
 ):
-
     tokens_to_check = [quote.from_token, quote.fee_token]
     chains_accepted = set([])
-
     # Check if token exists in the database
     if isinstance(quote.to_token, TokenQuote):
         tokens_to_check.append(quote.to_token)
         chains_accepted.add(quote.to_token.chain_id)
         for token in tokens_to_check:
             assert_token_address_exists(session, token.address, token.chain_id)
+        async with httpx.AsyncClient() as client:
+            quote = await quote_biconomy(
+                client,
+                quote.from_address,
+                quote.to_address,
+                quote.from_token.address,
+                tok.address,
+                quote.from_token.chain_id,
+                tok.chain_id,
+                quote.fee_token.address,
+                quote.fee_token.chain_id,
+                quote.amount,
+                quote.slippage or 0.5,
+                BICONOMY_URL,
+                BICONOMY_HEADERS,
+            )
+            if not quote:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"No quotes received",
+                )
+            return quote
 
     elif isinstance(quote.to_token, TokenQuoteBySlug):
         to_token_in_db = assert_token_slug_exists(session, quote.to_token.slug)
@@ -108,65 +134,45 @@ async def post_quote(
                 status_code=404,
                 detail=f"No chains accepted",
             )
-
         # TODO: Implement `allow_swap_providers` and `allow_bridge_providers`
-    return {"message": "test"}
+        async with httpx.AsyncClient() as client:
+            semaphore = asyncio.Semaphore(2)
 
-    """
-    # Check for DEXs with the best liquidity
-    response = requests.post(
-        "https://api.biconomy.io/v1/quote",
-        headers={"Content-Type": "application/json"},
-        json={
-            "mode": "eoa",
-            "ownerAddress": quote.from_address,
-            "simulate": False,
-            "fundingTokens": [
-                {
-                    "tokenAddress": quote.from_token.address,
-                    "chainId": quote.from_token.chain_id,
-                    "amount": quote.amount,
-                },
-            ],
-            "feeToken": {
-                "address": quote.fee_token.address,
-                "chainId": quote.fee_token.chain_id,
-            },
-            "composeFlows": [
-                {
-                    "type": "/instructions/intent-simple",
-                    "data": {
-                        "srcChainId": quote.from_token.chain_id,
-                        "dstChainId": quote.to_token.chain_id,
-                        "srcToken": quote.from_token.address,
-                        "dstToken": quote.to_token.address,
-                        "amount": quote.amount,
-                        "slippage": quote.slippage,
-                    },
-                },
-                {
-                    "type": "/instructions/build",
-                    "data": {
-                        "functionSignature": "function transfer(address to, uint256 value)",
-                        "args": [
+            async def safe_quote(tok):
+                async with semaphore:
+                    try:
+                        return await quote_biconomy(
+                            client,
+                            quote.from_address,
                             quote.to_address,
-                            {
-                                "type": "runtimeErc20Balance",
-                                "tokenAddress": quote.to_token.address,
-                                "constraints": {"gte": "1"},
-                            },
-                        ],
-                        "to": quote.to_token.address,
-                        "chainId": quote.to_token.chain_id,
-                    },
-                },
-            ],
-        },
-    )
-    # TODO: Add output amount in USD
-    return response.json()
-    """
-    return {"message": "test"}
+                            quote.from_token.address,
+                            tok.address,
+                            quote.from_token.chain_id,
+                            tok.chain_id,
+                            quote.fee_token.address,
+                            quote.fee_token.chain_id,
+                            quote.amount,
+                            quote.slippage or 0.5,
+                            BICONOMY_URL,
+                            BICONOMY_HEADERS,
+                        )
+                    except Exception as exc:
+                        print(exc)
+                        raise HTTPException(
+                            status_code=404,
+                            detail=f"Quote failed",
+                        )
+
+            quotes = await asyncio.gather(
+                *(safe_quote(tok) for tok in to_token_in_db.addresses)
+            )
+            if not quotes:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"No quotes received",
+                )
+            # TODO: Handle best ouput with fees by converting everthing to usd
+            return get_best_output(quotes)
 
 
 @app.get("/tokens", response_model=list[TokenPublic])
