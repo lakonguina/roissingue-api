@@ -3,6 +3,12 @@
 from typing import Any
 
 import httpx
+from coingecko_sdk import AsyncCoingecko
+
+coingecko_client = AsyncCoingecko(
+    demo_api_key="CG-hFX9GPn4qa6FzGtqb2eyGgad",
+    environment="demo",
+)
 
 
 async def post_json(

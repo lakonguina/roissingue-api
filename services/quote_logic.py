@@ -7,7 +7,7 @@ from sqlmodel import Session, SQLModel
 
 from database import Token, TokenAddress
 from queries.token import get_token_by_address, get_token_by_slug
-from services.req import post_json
+from services.req import coingecko_client, post_json
 
 
 def filter_chains(
@@ -227,3 +227,10 @@ def get_best_output(quotes: dict[str, Any]) -> dict[str, Any]:
             as expected or values cannot be converted to int.
     """
     return max(quotes, key=lambda q: int(q["returnedData"][0]["minOutputAmount"]))
+
+
+async def get_token_data(chain_slug: str, token_address: str) -> dict[str, Any]:
+    return await coingecko_client.onchain.networks.tokens.info.get(
+        address=token_address,
+        network=chain_slug,
+    )
