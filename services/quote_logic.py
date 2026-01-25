@@ -1,4 +1,4 @@
-"""Logic related to quoting"""
+"""Quote computation and validation logic."""
 
 from typing import Any
 
@@ -15,18 +15,18 @@ def filter_chains(
     denied_chains: set[int],
     allowed_chains: set[int],
 ) -> set[int]:
-    """Return the set of accepted chains after applying a deny and allow filters.
+    """Return the set of accepted chains after applying deny/allow filters.
 
-    Denied chains are removed. If allowed chains is not empty then accepted chains
-    are restricted to it.
+    Denied chains are removed first. If `allowed_chains` is non-empty, the result
+    is restricted to the intersection with `allowed_chains`.
 
     Args:
-        base_chains: A set of chains serving as base.
-        denied_chains: Denied chains.
-        allowed_chains: Chains allowed.
+        base_chains: Base set of candidate chain IDs.
+        denied_chains: Chain IDs to exclude.
+        allowed_chains: Chain IDs to allow (if non-empty, acts as a whitelist).
 
     Returns:
-        A new set containing the accepted chains id.
+        The filtered set of accepted chain IDs.
     """
     accepted = base_chains - denied_chains
     if allowed_chains:
@@ -39,7 +39,19 @@ def assert_token_address_exists(
     address: str,
     chain_id: int,
 ) -> TokenAddress:
-    """Assert a token is existing in a database searching by address and chain id."""
+    """Fetch a token address.
+
+    Args:
+        session: Active database session.
+        address: Token contract address.
+        chain_id: Chain/network identifier.
+
+    Returns:
+        The matching `TokenAddress`.
+
+    Raises:
+        HTTPException: If the token address is not found for the given chain.
+    """
     token = get_token_by_address(session, address, chain_id)
     if not token:
         raise HTTPException(
@@ -53,7 +65,18 @@ def assert_token_slug_exists(
     session: Session,
     slug: str,
 ) -> Token:
-    """Assert a token is existing in a database searching by slug."""
+    """Fetch a token by slug.
+
+    Args:
+        session: Active database session.
+        slug: Token slug (unique identifier).
+
+    Returns:
+        The matching `Token`.
+
+    Raises:
+        HTTPException: If no token exists for the provided slug.
+    """
     token = get_token_by_slug(session, slug)
     if not token:
         raise HTTPException(
@@ -75,6 +98,23 @@ def build_biconomy_payload(
     slippage: float,
     amount: str,
 ) -> dict[str, Any]:
+    """Build the request payload for Biconomy's quote/compose endpoint.
+
+    Args:
+        from_address: Address initiating the quote (owner).
+        to_address: Recipient address on destination.
+        from_token_address: ERC-20 address on source chain.
+        to_token_address: ERC-20 address on destination chain.
+        from_chain_id: Source chain ID (as expected by Biconomy).
+        to_chain_id: Destination chain ID (as expected by Biconomy).
+        fee_token_address: Token address used to pay fees.
+        fee_chain_id: Chain ID where the fee token is paid.
+        slippage: Allowed slippage (typically fraction or percentage depending on API).
+        amount: Input amount (string, usually in base units).
+
+    Returns:
+        A dict ready to be JSON-encoded and POSTed to Biconomy.
+    """
     return {
         "mode": "eoa",
         "ownerAddress": from_address,
@@ -137,6 +177,26 @@ async def quote_biconomy(
     biconomy_url: str,
     biconomy_headers: dict[str, str],
 ) -> Any:
+    """Request a quote from Biconomy and return the parsed JSON response.
+
+    Args:
+        client: An initialized `httpx.AsyncClient`.
+        from_address: Address initiating the quote (owner).
+        to_address: Recipient address on destination.
+        from_token_address: ERC-20 address on source chain.
+        to_token_address: ERC-20 address on destination chain.
+        from_chain_id: Source chain ID.
+        to_chain_id: Destination chain ID.
+        fee_token_address: Token address used to pay fees.
+        fee_chain_id: Chain ID where the fee token is paid.
+        amount: Input amount (string, usually in base units).
+        slippage: Allowed slippage.
+        biconomy_url: Target Biconomy endpoint URL.
+        biconomy_headers: Headers to send to Biconomy (e.g. auth keys).
+
+    Returns:
+        The JSON-decoded response from Biconomy.
+    """
     payload = build_biconomy_payload(
         from_address=from_address,
         to_address=to_address,
@@ -153,4 +213,17 @@ async def quote_biconomy(
 
 
 def get_best_output(quotes: dict[str, Any]) -> dict[str, Any]:
+    """Select the quote with the highest minimum output amount.
+
+    Args:
+        quotes: An iterable of quote objects (despite the annotation, this is
+            expected to be something like `list[dict[str, Any]]`).
+
+    Returns:
+        The quote object that maximizes the `minOutputAmount`.
+
+    Raises:
+        KeyError/IndexError/TypeError/ValueError: If the quote structure is not
+            as expected or values cannot be converted to int.
+    """
     return max(quotes, key=lambda q: int(q["returnedData"][0]["minOutputAmount"]))
