@@ -1,8 +1,7 @@
-from typing import Annotated
+from typing import Annotated, Any
 
 from pydantic import confloat
-from sqlalchemy import BigInteger
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import JSON, BigInteger
 from sqlmodel import Field, Relationship, Session, SQLModel, create_engine, select
 
 
@@ -62,7 +61,7 @@ class TokenAddressBase(SQLModel):
 class TokenAddress(TokenAddressBase, table=True):
     __tablename__ = "token_addresses"
     id: int | None = Field(default=None, primary_key=True)
-    extra_data: dict | None = Field(sa_type=JSONB)
+    extra_data: dict | None = Field(default=None, sa_type=JSON)
     token_id: int = Field(foreign_key="tokens.id", index=True)
     chain_id: int = Field(foreign_key="chains.id", index=True, sa_type=BigInteger)
     token: Token = Relationship(back_populates="addresses")
@@ -75,6 +74,16 @@ class TokenAddressPublic(TokenAddressBase):
 
 class TokenPublic(TokenBase):
     addresses: list[TokenAddressPublic]
+
+
+class QuoteWithData(SQLModel):
+    quote: dict[str, Any]
+    to_token: TokenAddress
+
+
+class QuotesBest(SQLModel):
+    quotes: list[QuoteWithData]
+    fee_token: TokenAddress
 
 
 sqlite_file_name = "database.db"

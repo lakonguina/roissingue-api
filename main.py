@@ -13,6 +13,8 @@ from database import (
     Chain,
     ChainPublic,
     Quote,
+    QuotesBest,
+    QuoteWithData,
     Token,
     TokenAddress,
     TokenPublic,
@@ -25,7 +27,7 @@ from seed import seed_blockchains_and_tokens
 from services.quote_logic import (
     assert_token_address_exists,
     assert_token_slug_exists,
-    filter_chains,
+    filter_tokens,
     get_best_output,
     quote_biconomy,
 )
@@ -34,9 +36,6 @@ BICONOMY_URL = "https://api.biconomy.io/v1/quote"
 BICONOMY_HEADERS = {"Content-Type": "application/json"}
 
 app = FastAPI()
-coingecko_client = AsyncCoingecko(
-    demo_api_key=os.environ.get("COINGECKO_DEMO_API_KEY"), environment="demo"
-)
 
 
 @app.on_event("startup")
@@ -74,12 +73,10 @@ async def post_quote(
     ],
     session: Session = Depends(get_session),
 ):
-    tokens_to_check = [quote.from_token, quote.fee_token]
-    chains_accepted = set([])
     # Check if token exists in the database
     if isinstance(quote.to_token, TokenQuote):
+        tokens_to_check = [quote.from_token, quote.fee_token]
         tokens_to_check.append(quote.to_token)
-        chains_accepted.add(quote.to_token.chain_id)
         for token in tokens_to_check:
             assert_token_address_exists(session, token.address, token.chain_id)
         async with httpx.AsyncClient() as client:
@@ -106,11 +103,10 @@ async def post_quote(
             return quote
 
     elif isinstance(quote.to_token, TokenQuoteBySlug):
-        to_token_in_db = assert_token_slug_exists(session, quote.to_token.slug)
-        chains_accepted.update([addr.chain_id for addr in to_token_in_db.addresses])
+        tokens_accepted = []
 
-        # Check if chain exists in the database
         def are_chains_accepted(chains: list[int]) -> None:
+
             for chain_id in chains:
                 chain_db = session.exec(
                     select(Chain).where(Chain.id == chain_id)
@@ -125,36 +121,44 @@ async def post_quote(
             are_chains_accepted(quote.allow_chains)
         if quote.deny_chains:
             are_chains_accepted(quote.deny_chains)
+
+        to_token_in_db = assert_token_slug_exists(session, quote.to_token.slug)
+        tokens_accepted = [tok for tok in to_token_in_db.addresses]
+
         # Add and remove chains from the quote
-        chains_accepted = filter_chains(
-            chains_accepted, quote.deny_chains, quote.allow_chains
+        tokens_accepted = filter_tokens(
+            tokens_accepted, quote.deny_chains, quote.allow_chains
         )
-        if not chains_accepted:
+        if not tokens_accepted:
             raise HTTPException(
                 status_code=404,
                 detail=f"No chains accepted",
             )
         # TODO: Implement `allow_swap_providers` and `allow_bridge_providers`
+
         async with httpx.AsyncClient() as client:
             semaphore = asyncio.Semaphore(2)
 
             async def safe_quote(tok):
                 async with semaphore:
                     try:
-                        return await quote_biconomy(
-                            client,
-                            quote.from_address,
-                            quote.to_address,
-                            quote.from_token.address,
-                            tok.address,
-                            quote.from_token.chain_id,
-                            tok.chain_id,
-                            quote.fee_token.address,
-                            quote.fee_token.chain_id,
-                            quote.amount,
-                            quote.slippage or 0.5,
-                            BICONOMY_URL,
-                            BICONOMY_HEADERS,
+                        return QuoteWithData(
+                            quote=await quote_biconomy(
+                                client,
+                                quote.from_address,
+                                quote.to_address,
+                                quote.from_token.address,
+                                tok.address,
+                                quote.from_token.chain_id,
+                                tok.chain_id,
+                                quote.fee_token.address,
+                                quote.fee_token.chain_id,
+                                quote.amount,
+                                quote.slippage or 0.5,
+                                BICONOMY_URL,
+                                BICONOMY_HEADERS,
+                            ),
+                            to_token=tok,
                         )
                     except Exception as exc:
                         print(exc)
@@ -163,8 +167,15 @@ async def post_quote(
                             detail=f"Quote failed",
                         )
 
-            quotes = await asyncio.gather(
-                *(safe_quote(tok) for tok in to_token_in_db.addresses)
+            fee_token = assert_token_address_exists(
+                session, quote.fee_token.address, quote.fee_token.chain_id
+            )
+
+            quotes = QuotesBest(
+                quotes=await asyncio.gather(
+                    *(safe_quote(tok) for tok in tokens_accepted)
+                ),
+                fee_token=fee_token,
             )
             if not quotes:
                 raise HTTPException(
@@ -172,7 +183,7 @@ async def post_quote(
                     detail=f"No quotes received",
                 )
             # TODO: Handle best ouput with fees by converting everthing to usd
-            return get_best_output(quotes)
+            return await get_best_output(quotes)
 
 
 @app.get("/tokens", response_model=list[TokenPublic])

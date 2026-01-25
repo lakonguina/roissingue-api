@@ -1,36 +1,37 @@
 """Quote computation and validation logic."""
 
+import asyncio
 from typing import Any
 
 import httpx
+from aiocache import cached
 from sqlmodel import Session, SQLModel
 
-from database import Token, TokenAddress
+from database import QuotesBest, Token, TokenAddress
 from queries.token import get_token_by_address, get_token_by_slug
-from services.req import coingecko_client, post_json
+from services.req import get, post_json
+
+COINGECKO_URL = "https://api.coingecko.com/api/v3/onchain/networks/eth/tokens/0xdac17f958d2ee523a2206206994597c13d831ec7"
 
 
-def filter_chains(
-    base_chains: set[int],
+def filter_tokens(
+    base_tokens: list[TokenAddress],
     denied_chains: set[int],
     allowed_chains: set[int],
 ) -> set[int]:
-    """Return the set of accepted chains after applying deny/allow filters.
-
-    Denied chains are removed first. If `allowed_chains` is non-empty, the result
-    is restricted to the intersection with `allowed_chains`.
+    """Return the set of accepted tokens after applying deny/allow filters.
 
     Args:
-        base_chains: Base set of candidate chain IDs.
+        base_tokens: Base set of tokens.
         denied_chains: Chain IDs to exclude.
         allowed_chains: Chain IDs to allow (if non-empty, acts as a whitelist).
 
     Returns:
-        The filtered set of accepted chain IDs.
+        The filtered set of tokens on chain IDs.
     """
-    accepted = base_chains - denied_chains
+    accepted = [tok for tok in base_tokens if tok.chain_id not in denied_chains]
     if allowed_chains:
-        accepted &= allowed_chains
+        return [tok for tok in accepted if tok.chain_id in allowed_chains]
     return accepted
 
 
@@ -212,7 +213,7 @@ async def quote_biconomy(
     return await post_json(client, biconomy_url, payload, biconomy_headers)
 
 
-def get_best_output(quotes: dict[str, Any]) -> dict[str, Any]:
+async def get_best_output(quotes_best: QuotesBest) -> dict[str, Any]:
     """Select the quote with the highest minimum output amount.
 
     Args:
@@ -226,11 +227,28 @@ def get_best_output(quotes: dict[str, Any]) -> dict[str, Any]:
         KeyError/IndexError/TypeError/ValueError: If the quote structure is not
             as expected or values cannot be converted to int.
     """
-    return max(quotes, key=lambda q: int(q["returnedData"][0]["minOutputAmount"]))
+    async with httpx.AsyncClient() as client:
+        semaphore = asyncio.Semaphore(2)
+
+        async def safe_get_token_data(tok):
+            async with semaphore:
+                coingecko_url = (
+                    f"https://api.coingecko.com/api/v3/onchain/networks/"
+                    f"{tok.chain.slug}/tokens/{tok.address}"
+                )
+                headers = {"x-cg-demo-api-key": "CG-hFX9GPn4qa6FzGtqb2eyGgad"}
+                return await get(client, coingecko_url, headers)
+
+        token_data = await asyncio.gather(
+            *(safe_get_token_data(q.to_token) for q in quotes_best.quotes),
+            safe_get_token_data(quotes_best.fee_token),
+        )
+        return {"token_data": token_data, "quotes": quotes_best.quotes}
 
 
+@cached(ttl=60 * 30)
 async def get_token_data(chain_slug: str, token_address: str) -> dict[str, Any]:
     return await coingecko_client.onchain.networks.tokens.info.get(
-        address=token_address,
         network=chain_slug,
+        address=token_address,
     )

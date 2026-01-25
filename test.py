@@ -735,4 +735,85 @@ quotes = [
     },
 ]
 
+token_data = [
+    {
+        "data": {
+            "id": "optimism_0x0b2c639c533813f4aa9d7837caf62653d097ff85",
+            "type": "token",
+            "attributes": {
+                "address": "0x0b2c639c533813f4aa9d7837caf62653d097ff85",
+                "name": "USD Coin",
+                "symbol": "USDC",
+                "decimals": 6,
+                "image_url": "https://coin-images.coingecko.com/coins/images/6319/large/usdc.png?1696506694",
+                "coingecko_coin_id": "usd-coin",
+                "total_supply": "216506692053094.0",
+                "normalized_total_supply": "216506692.053094",
+                "price_usd": "0.9993176872",
+                "fdv_usd": "216358953.805174",
+                "total_reserve_in_usd": "17983887.6731112266062546",
+                "volume_usd": {"h24": "11067240.6728408"},
+                "market_cap_usd": "72532860850.4153",
+            },
+            "relationships": {
+                "top_pools": {
+                    "data": [
+                        {
+                            "id": "optimism_0x478946bcd4a5a22b316470f5486fafb928c0ba25",
+                            "type": "pool",
+                        },
+                        {
+                            "id": "optimism_0xebe9db89947dd14b34817843231b74044084b04d5b4fea5b4cd1b433b3e5b99f",
+                            "type": "pool",
+                        },
+                        {
+                            "id": "optimism_0xcf50dea65ee80ebddaa61005a960ef5a5c995a99",
+                            "type": "pool",
+                        },
+                    ]
+                }
+            },
+        }
+    },
+    {
+        "data": {
+            "id": "base_0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+            "type": "token",
+            "attributes": {
+                "address": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+                "name": "USD Coin",
+                "symbol": "USDC",
+                "decimals": 6,
+                "image_url": "https://coin-images.coingecko.com/coins/images/6319/large/usdc.png?1696506694",
+                "coingecko_coin_id": "usd-coin",
+                "total_supply": "4640631183426785.0",
+                "normalized_total_supply": "4640631183.42679",
+                "price_usd": "0.9992476066",
+                "fdv_usd": "4637117057.76879",
+                "total_reserve_in_usd": "139521645.59812081704628058148045306548",
+                "volume_usd": {"h24": "460047759.036398"},
+                "market_cap_usd": "72460921150.6192",
+            },
+            "relationships": {
+                "top_pools": {
+                    "data": [
+                        {
+                            "id": "base_0xb2cc224c1c9fee385f8ad6a55b4d94e92359dc59",
+                            "type": "pool",
+                        },
+                        {
+                            "id": "base_0x72ab388e2e2f6facef59e3c3fa2c4e29011c2d38",
+                            "type": "pool",
+                        },
+                        {
+                            "id": "base_0x6c561b446416e1a00e8e93e221854d6ea4171372",
+                            "type": "pool",
+                        },
+                    ]
+                }
+            },
+        }
+    },
+]
+
 print(max(quotes, key=lambda q: int(q["returnedData"][0]["minOutputAmount"])))
