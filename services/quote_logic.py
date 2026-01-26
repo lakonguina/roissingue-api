@@ -5,7 +5,8 @@ from typing import Any
 
 import httpx
 from aiocache import cached
-from sqlmodel import Session, SQLModel
+from fastapi import HTTPException
+from sqlmodel import Session
 
 from database import QuotesBest, Token, TokenAddress
 from queries.token import get_token_by_address, get_token_by_slug
@@ -230,6 +231,7 @@ async def get_best_output(quotes_best: QuotesBest) -> dict[str, Any]:
     async with httpx.AsyncClient() as client:
         semaphore = asyncio.Semaphore(2)
 
+        @cached(ttl=60 * 30)
         async def safe_get_token_data(tok):
             async with semaphore:
                 coingecko_url = (
@@ -239,16 +241,49 @@ async def get_best_output(quotes_best: QuotesBest) -> dict[str, Any]:
                 headers = {"x-cg-demo-api-key": "CG-hFX9GPn4qa6FzGtqb2eyGgad"}
                 return await get(client, coingecko_url, headers)
 
-        token_data = await asyncio.gather(
+        token_data: list[str, Any] = await asyncio.gather(
             *(safe_get_token_data(q.to_token) for q in quotes_best.quotes),
-            safe_get_token_data(quotes_best.fee_token),
         )
+        token_data_fee = await safe_get_token_data(quotes_best.fee_token)
+
+        for tok in token_data:
+            for quo in quotes_best.quotes:
+                if (
+                    tok.get("data").get("attributes").get("address").lower()
+                    == quo.to_token.address.lower()
+                ):
+                    feePriceUsdPerUnit = float(
+                        token_data_fee.get("data").get("attributes").get("price_usd")
+                    )
+                    feePriceUsd = (
+                        float(quo.quote.get("fee").get("amount"))
+                        / 10**quotes_best.fee_token.token.decimals
+                    ) * feePriceUsdPerUnit
+
+                    toTokenPriceUsdPerUnit = float(
+                        tok.get("data").get("attributes").get("price_usd")
+                    )
+
+                    outputAmount = float(
+                        quo.quote.get("returnedData")[0].get("outputAmount")
+                    )
+                    minOutputAmount = float(
+                        quo.quote.get("returnedData")[0].get("outputAmount")
+                    )
+
+                    toTokenPriceUsd = (
+                        outputAmount / 10**quo.to_token.token.decimals
+                    ) * toTokenPriceUsdPerUnit
+                    minToTokenPriceUsd = (
+                        minOutputAmount / 10**quo.to_token.token.decimals
+                    ) * toTokenPriceUsdPerUnit
+
+                    quo.quote["fee"]["priceUsd"] = feePriceUsd
+                    quo.quote["returnedData"][0]["outputAmountUsd"] = toTokenPriceUsd
+                    quo.quote["returnedData"][0][
+                        "minOutputAmountUsd"
+                    ] = minToTokenPriceUsd
+
+                    continue
+
         return {"token_data": token_data, "quotes": quotes_best.quotes}
-
-
-@cached(ttl=60 * 30)
-async def get_token_data(chain_slug: str, token_address: str) -> dict[str, Any]:
-    return await coingecko_client.onchain.networks.tokens.info.get(
-        network=chain_slug,
-        address=token_address,
-    )

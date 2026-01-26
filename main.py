@@ -1,11 +1,8 @@
 import asyncio
-import os
 from typing import Annotated
 
 import httpx
-from coingecko_sdk import AsyncCoingecko
 from fastapi import Body, Depends, FastAPI, HTTPException
-from pydantic import BaseModel
 from sqlalchemy import exc
 from sqlmodel import Session, select
 
@@ -16,7 +13,6 @@ from database import (
     QuotesBest,
     QuoteWithData,
     Token,
-    TokenAddress,
     TokenPublic,
     TokenQuote,
     TokenQuoteBySlug,
@@ -79,15 +75,16 @@ async def post_quote(
         tokens_to_check.append(quote.to_token)
         for token in tokens_to_check:
             assert_token_address_exists(session, token.address, token.chain_id)
+
         async with httpx.AsyncClient() as client:
             quote = await quote_biconomy(
                 client,
                 quote.from_address,
                 quote.to_address,
                 quote.from_token.address,
-                tok.address,
+                quote.to_token.address,
                 quote.from_token.chain_id,
-                tok.chain_id,
+                quote.to_token.chain_id,
                 quote.fee_token.address,
                 quote.fee_token.chain_id,
                 quote.amount,
@@ -98,7 +95,7 @@ async def post_quote(
             if not quote:
                 raise HTTPException(
                     status_code=404,
-                    detail=f"No quotes received",
+                    detail="No quotes received",
                 )
             return quote
 
@@ -106,7 +103,6 @@ async def post_quote(
         tokens_accepted = []
 
         def are_chains_accepted(chains: list[int]) -> None:
-
             for chain_id in chains:
                 chain_db = session.exec(
                     select(Chain).where(Chain.id == chain_id)
@@ -132,7 +128,7 @@ async def post_quote(
         if not tokens_accepted:
             raise HTTPException(
                 status_code=404,
-                detail=f"No chains accepted",
+                detail="No chains accepted",
             )
         # TODO: Implement `allow_swap_providers` and `allow_bridge_providers`
 
@@ -164,7 +160,7 @@ async def post_quote(
                         print(exc)
                         raise HTTPException(
                             status_code=404,
-                            detail=f"Quote failed",
+                            detail="Quote failed",
                         )
 
             fee_token = assert_token_address_exists(
@@ -180,7 +176,7 @@ async def post_quote(
             if not quotes:
                 raise HTTPException(
                     status_code=404,
-                    detail=f"No quotes received",
+                    detail="No quotes received",
                 )
             # TODO: Handle best ouput with fees by converting everthing to usd
             return await get_best_output(quotes)

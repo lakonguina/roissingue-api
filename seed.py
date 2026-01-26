@@ -49,8 +49,8 @@ def _seed_tokens() -> list[Token]:
         A list of `Token` objects (not yet persisted).
     """
     return [
-        Token(name="Circle USD", symbol="USDC", slug="circle-usd"),
-        Token(name="Wrapped ETH", symbol="WETH", slug="wrapped-ethereum"),
+        Token(name="Circle USD", symbol="USDC", slug="circle-usd", decimals=6),
+        Token(name="Wrapped ETH", symbol="WETH", slug="wrapped-ethereum", decimals=18),
     ]
 
 

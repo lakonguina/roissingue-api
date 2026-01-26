@@ -1,8 +1,7 @@
-from typing import Annotated, Any
+from typing import Any
 
-from pydantic import confloat
 from sqlalchemy import JSON, BigInteger
-from sqlmodel import Field, Relationship, Session, SQLModel, create_engine, select
+from sqlmodel import Field, Relationship, Session, SQLModel, create_engine
 
 
 class TokenQuote(SQLModel):
@@ -52,6 +51,7 @@ class Token(TokenBase, table=True):
     __tablename__ = "tokens"
     id: int | None = Field(default=None, primary_key=True)
     addresses: list["TokenAddress"] = Relationship(back_populates="token")
+    decimals: int = Field()
 
 
 class TokenAddressBase(SQLModel):
