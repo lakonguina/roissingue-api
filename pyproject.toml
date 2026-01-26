@@ -12,3 +12,9 @@ dependencies = [
     "ruff>=0.14.14",
     "sqlmodel>=0.0.31",
 ]
+
+[dependency-groups]
+dev = [
+    "eth-account>=0.13.7",
+    "web3>=7.14.0",
+]

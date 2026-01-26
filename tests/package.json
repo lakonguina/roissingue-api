@@ -1,0 +1,9 @@
+{
+  "dependencies": {
+    "dotenv": "^17.2.3",
+    "viem": "^2.45.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.0.10"
+  }
+}

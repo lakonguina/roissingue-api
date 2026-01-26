@@ -86,6 +86,19 @@ class QuotesBest(SQLModel):
     fee_token: TokenAddress
 
 
+class QuotePublic(SQLModel):
+    quote: dict[str, Any]
+
+
+class QuoteBestsPublic(SQLModel):
+    quotes: list[QuotePublic]
+
+
+class Execute(SQLModel):
+    quote: dict[str, Any] = Field()
+    payload_to_sign: list[dict[str, Any]] = Field(alias="payloadToSign")
+
+
 sqlite_file_name = "database.db"
 sqlite_url = f"sqlite:///{sqlite_file_name}"
 

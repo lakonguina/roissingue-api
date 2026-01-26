@@ -285,5 +285,8 @@ async def get_best_output(quotes_best: QuotesBest) -> dict[str, Any]:
                     ] = minToTokenPriceUsd
 
                     continue
-
-        return {"token_data": token_data, "quotes": quotes_best.quotes}
+    return max(
+        quotes_best.quotes,
+        key=lambda q: float(q.quote["returnedData"][0]["minOutputAmountUsd"])
+        - float(q.quote["fee"]["priceUsd"]),
+    )

@@ -9,7 +9,9 @@ from sqlmodel import Session, select
 from database import (
     Chain,
     ChainPublic,
+    Execute,
     Quote,
+    QuotePublic,
     QuotesBest,
     QuoteWithData,
     Token,
@@ -27,8 +29,10 @@ from services.quote_logic import (
     get_best_output,
     quote_biconomy,
 )
+from services.req import post_json
 
 BICONOMY_URL = "https://api.biconomy.io/v1/quote"
+BICONOMY_EXECUTE_URL = "https://api.biconomy.io/v1/execute"
 BICONOMY_HEADERS = {"Content-Type": "application/json"}
 
 app = FastAPI()
@@ -97,7 +101,7 @@ async def post_quote(
                     status_code=404,
                     detail="No quotes received",
                 )
-            return quote
+            return QuotePublic(quote=quote)
 
     elif isinstance(quote.to_token, TokenQuoteBySlug):
         tokens_accepted = []
@@ -113,6 +117,7 @@ async def post_quote(
                         detail=f"Chain with id {chain_id} not found",
                     )
 
+        # Validate allowed and denied chains
         if quote.allow_chains:
             are_chains_accepted(quote.allow_chains)
         if quote.deny_chains:
@@ -120,8 +125,7 @@ async def post_quote(
 
         to_token_in_db = assert_token_slug_exists(session, quote.to_token.slug)
         tokens_accepted = [tok for tok in to_token_in_db.addresses]
-
-        # Add and remove chains from the quote
+        # Filter allowed and denied chains
         tokens_accepted = filter_tokens(
             tokens_accepted, quote.deny_chains, quote.allow_chains
         )
@@ -178,8 +182,19 @@ async def post_quote(
                     status_code=404,
                     detail="No quotes received",
                 )
-            # TODO: Handle best ouput with fees by converting everthing to usd
-            return await get_best_output(quotes)
+
+            return (await get_best_output(quotes)).quote
+
+
+@app.post("/execute")
+async def execute(data: Execute, session: Session = Depends(get_session)):
+    async with httpx.AsyncClient() as client:
+        return await post_json(
+            client,
+            BICONOMY_EXECUTE_URL,
+            {**data.quote, "payloadToSign": data.payload_to_sign},
+            BICONOMY_HEADERS,
+        )
 
 
 @app.get("/tokens", response_model=list[TokenPublic])
