@@ -3,6 +3,7 @@ from typing import Annotated
 
 import httpx
 from fastapi import Body, Depends, FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import exc
 from sqlmodel import Session, select
 
@@ -36,6 +37,14 @@ BICONOMY_EXECUTE_URL = "https://api.biconomy.io/v1/execute"
 BICONOMY_HEADERS = {"Content-Type": "application/json"}
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.on_event("startup")

@@ -1,124 +1,233 @@
-import "dotenv/config";
-import {
-  Address,
-  createWalletClient,
-  Hex,
-  http,
-  publicActions,
-  SignTypedDataParameters,
-} from "viem";
-import { privateKeyToAccount } from "viem/accounts";
-import { base } from "viem/chains";
+import { Address, Hex, SignTypedDataParameters } from "viem";
 
+/**
+ * Types for different signable payloads.
+ */
+
+// Payload for EIP-712 typed data signature (smart-account v2.2.1, permits)
 type SignableTypedDataPayload = Omit<SignTypedDataParameters, "account">;
 
+// Payload for personal message signing (legacy v2.1.0, eoa-7702)
 type SignablePersonalMessagePayload = {
-  message: { raw: Hex };
+  message: {
+    raw: Hex;
+  };
 };
 
+// Union type for "simple" quote type payloads (can be either format)
 type SignableSimplePayload =
   | SignableTypedDataPayload
   | SignablePersonalMessagePayload;
 
-type SignableOnChainPayload = {
-  data: Hex;
-  to: Address;
-  chainId: number;
-  value?: string | number | bigint;
-};
+// Payload for on-chain transaction signing
+type SignableOnChainPayload =
+  | {
+      data: Hex;
+      to: Address;
+      chainId: number;
+      value: string;
+    }
+  | {
+      data: Hex;
+      to: Address;
+      chainId: number;
+      value?: string | undefined;
+    };
 
+/**
+ * Type guard to detect EIP-712 typed data payload.
+ * v2.2.1 smart accounts use typed data, v2.1.0 uses personal message.
+ */
 function isTypedDataPayload(
   payload: SignableSimplePayload,
 ): payload is SignableTypedDataPayload {
   return "domain" in payload && "primaryType" in payload;
 }
 
-const eoaAccount = privateKeyToAccount(process.env.PK! as `0x${string}`);
-
-const walletClient = createWalletClient({
-  account: eoaAccount,
-  chain: base,
-  transport: http(),
-}).extend(publicActions);
-
-async function signSimple(signable: SignableSimplePayload): Promise<Hex> {
-  if (isTypedDataPayload(signable)) {
-    return walletClient.signTypedData({
-      ...signable,
-      account: eoaAccount,
-    });
+/**
+ * Signs a "simple" quote payload. Handles both formats:
+ * - EIP-712 typed data (v2.2.1 smart accounts)
+ * - Personal message (v2.1.0 legacy accounts, eoa-7702)
+ *
+ * @param walletClient - The viem wallet client to use for signing.
+ * @param signablePayload - The payload to sign (auto-detected format).
+ * @returns The signature as a Hex string.
+ *
+ * @example
+ * // EIP-712 typed data (v2.2.1 smart account)
+ * const signature = await signSimpleQuoteSignablePayload(walletClient, {
+ *   domain: { name: "Nexus" },
+ *   types: { MeeUserOp: [...], SuperTx: [{ name: "meeUserOps", type: "MeeUserOp[]" }] },
+ *   primaryType: "SuperTx",
+ *   message: { meeUserOps: [{ userOpHash: "0x...", lowerBoundTimestamp: 0, upperBoundTimestamp: 1765465749 }] }
+ * });
+ *
+ * @example
+ * // Personal message (v2.1.0 or eoa-7702)
+ * const signature = await signSimpleQuoteSignablePayload(walletClient, {
+ *   message: { raw: "0x68656c6c6f" }
+ * });
+ */
+const signSimpleQuoteSignablePayload = async (
+  walletClient: any,
+  signablePayload: SignableSimplePayload,
+): Promise<Hex> => {
+  if (isTypedDataPayload(signablePayload)) {
+    return await walletClient.signTypedData(signablePayload);
+  } else {
+    return await walletClient.signMessage(signablePayload);
   }
-  return eoaAccount.signMessage(signable);
-}
+};
 
-async function signPermit(typedData: SignableTypedDataPayload): Promise<Hex> {
-  return walletClient.signTypedData({
-    ...typedData,
-    account: eoaAccount,
-  });
-}
+/**
+ * Signs a permit quote payload (EIP-712 typed data for ERC20 permits).
+ *
+ * @param walletClient - The viem wallet client to use for signing.
+ * @param signablePayload - The EIP-712 payload to sign.
+ * @returns The signature as a Hex string.
+ *
+ * @example
+ * const signature = await signPermitQuoteSignablePayload(walletClient, {
+ *   domain: { ... },
+ *   types: { ... },
+ *   primaryType: "Permit",
+ *   message: { ... }
+ * });
+ */
+const signPermitQuoteSignablePayload = async (
+  walletClient: any,
+  signablePayload: SignableTypedDataPayload,
+): Promise<Hex> => {
+  return await walletClient.signTypedData(signablePayload);
+};
 
-async function signOnChain(tx: SignableOnChainPayload): Promise<Hex> {
+/**
+ * Signs an on-chain quote payload (transaction).
+ *
+ * @param walletClient - The viem wallet client to use for signing.
+ * @param signablePayload - The transaction payload to send.
+ * @returns The transaction hash as a Hex string.
+ *
+ * @example
+ * const txHash = await signOnChainQuoteSignablePayload(walletClient, {
+ *   to: "0x...",
+ *   data: "0x...",
+ *   value: "0",
+ *   chainId: 1
+ * });
+ */
+const signOnChainQuoteSignablePayload = async (
+  walletClient: any,
+  signablePayload: SignableOnChainPayload,
+): Promise<Hex> => {
   const hash = await walletClient.sendTransaction({
-    to: tx.to,
-    data: tx.data,
-    value: tx.value !== undefined ? BigInt(tx.value) : 0n,
+    account: walletClient.account,
+    to: signablePayload.to,
+    data: signablePayload.data,
+    value: BigInt(signablePayload.value || "0"),
   });
   await walletClient.waitForTransactionReceipt({ hash, confirmations: 5 });
   return hash;
-}
-
-type SimpleQuotePayload = {
-  signablePayload: SignableSimplePayload;
-  metadata?: unknown;
 };
 
-type PermitQuotePayload = {
-  signablePayload: SignableTypedDataPayload;
-  metadata: unknown;
-};
+/**
+ * Union type for all supported payloads to sign.
+ */
+type PayloadToSign =
+  | {
+      signablePayload: SignableSimplePayload;
+      metadata?: any;
+    }
+  | {
+      signablePayload: SignableTypedDataPayload;
+      metadata: {
+        nonce: string;
+        name: string;
+        version: string;
+        domainSeparator: string;
+        owner: string;
+        spender: string;
+        amount: string;
+      };
+    }
+  | SignableOnChainPayload;
 
-type OnChainQuotePayload = SignableOnChainPayload;
-
-type QuotePayloadToSign =
-  | SimpleQuotePayload
-  | PermitQuotePayload
-  | OnChainQuotePayload;
-
-export async function signQuoteSignablePayload(
+/**
+ * Signs a quote payload based on its type.
+ * Automatically handles both EIP-712 and personal message formats for "simple" type.
+ *
+ * @param walletClient - The viem wallet client to use for signing.
+ * @param quoteType - The type of quote from the API response.
+ * @param payloadToSign - The payload to sign.
+ * @returns The signature or transaction hash as a Hex string.
+ *
+ * @example
+ * // Simple - EIP-712 (v2.2.1 smart account)
+ * const sig = await signQuoteSignablePayload(walletClient, "simple", {
+ *   signablePayload: { domain: { name: "Nexus" }, types: {...}, primaryType: "SuperTx", message: { meeUserOps: [...] } }
+ * });
+ *
+ * @example
+ * // Simple - Personal message (v2.1.0 or eoa-7702)
+ * const sig = await signQuoteSignablePayload(walletClient, "simple", {
+ *   signablePayload: { message: { raw: "0x68656c6c6f" } }
+ * });
+ *
+ * @example
+ * // Permit (EIP-712 for ERC20)
+ * const sig = await signQuoteSignablePayload(walletClient, "permit", {
+ *   signablePayload: { domain: {...}, types: {...}, primaryType: "Permit", message: {...} },
+ *   metadata: { ... }
+ * });
+ *
+ * @example
+ * // On-chain transaction
+ * const txHash = await signQuoteSignablePayload(walletClient, "onchain", {
+ *   to: "0x...",
+ *   data: "0x...",
+ *   value: "0",
+ *   chainId: 1
+ * });
+ */
+export const signQuoteSignablePayload = async (
+  walletClient: any,
   quoteType: string,
-  payload: QuotePayloadToSign | any,
-): Promise<Hex> {
-  switch (quoteType.toLowerCase()) {
-    case "simple": {
-      if (!("signablePayload" in payload)) {
-        throw new Error("simple quote: signablePayload manquant");
+  payloadToSign: any,
+): Promise<Hex> => {
+  switch (quoteType) {
+    case "simple":
+      if ("signablePayload" in payloadToSign) {
+        return await signSimpleQuoteSignablePayload(
+          walletClient,
+          payloadToSign.signablePayload,
+        );
       }
-      return signSimple(payload.signablePayload);
-    }
-
-    case "permit": {
-      if (!("signablePayload" in payload)) {
-        throw new Error("permit quote: signablePayload manquant");
+      return await signSimpleQuoteSignablePayload(walletClient, payloadToSign);
+    case "permit":
+      if (!("signablePayload" in payloadToSign)) {
+        throw new Error("Permit requires signablePayload");
       }
-      const sp = payload.signablePayload;
-      if (!("domain" in sp && "types" in sp && "primaryType" in sp)) {
-        throw new Error("permit: payload n'est pas du EIP-712 valide");
-      }
-      return signPermit(sp as SignableTypedDataPayload);
-    }
-
-    case "onchain": {
-      if ("signablePayload" in payload) {
-        throw new Error("onchain quote: ne doit PAS contenir signablePayload");
-      }
-      if (!("to" in payload && "data" in payload && "chainId" in payload)) {
-        throw new Error("onchain: to/data/chainId manquants");
-      }
-      return signOnChain(payload as SignableOnChainPayload);
-    }
-
+      return await signPermitQuoteSignablePayload(
+        walletClient,
+        payloadToSign.signablePayload,
+      );
+    case "onchain":
+      return await signOnChainQuoteSignablePayload(walletClient, payloadToSign);
     default:
-      throw new Error(`quoteType non supporté : ${quoteType}`);
+      throw new Error("Unsupported quote type, can't sign the payload");
   }
-}
+};
+
+export {
+  signSimpleQuoteSignablePayload,
+  signPermitQuoteSignablePayload,
+  signOnChainQuoteSignablePayload,
+};
+
+export type {
+  SignableTypedDataPayload,
+  SignablePersonalMessagePayload,
+  SignableSimplePayload,
+  SignableOnChainPayload,
+  PayloadToSign,
+};

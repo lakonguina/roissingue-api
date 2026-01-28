@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { createWalletClient, http } from "viem";
+import { createWalletClient, http, publicActions } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { base } from "viem/chains";
 import { signQuoteSignablePayload } from "./signer";
@@ -10,7 +10,7 @@ const walletClient = createWalletClient({
   account,
   chain: base,
   transport: http(),
-});
+}).extend(publicActions);
 
 interface QuoteResponse {
   payloadToSign: Array<{
@@ -41,30 +41,29 @@ async function main() {
       },
       allowChains: [10, 8453],
       amount: "100000",
-      fromAddress: "0x6eBf2153f931334714984c7F5a8E574207927Cc7",
-      toAddress: "0x6eBf2153f931334714984c7F5a8E574207927Cc7",
+      fromAddress: account.address,
+      toAddress: account.address,
     }),
   });
 
   if (!res.ok) throw new Error(`Quote failed: ${res.statusText}`);
 
   const quoteResponse = (await res.json()) as QuoteResponse;
-
   const { payloadToSign, quoteType } = quoteResponse;
 
   for (let i = 0; i < payloadToSign.length; i++) {
-    const item = payloadToSign[i];
-    const signature = await signQuoteSignablePayload(quoteType, item as any);
-    payloadToSign[i] = { ...item, signature };
+    const signature = await signQuoteSignablePayload(
+      walletClient,
+      quoteType,
+      payloadToSign[i] as any,
+    );
+    payloadToSign[i] = { ...payloadToSign[i], signature };
   }
 
   const execRes = await fetch("http://127.0.0.1:8000/execute", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      quote: quoteResponse,
-      payloadToSign,
-    }),
+    body: JSON.stringify({ quote: quoteResponse, payloadToSign }),
   });
 
   if (!execRes.ok) throw new Error(`Execute failed: ${execRes.statusText}`);
