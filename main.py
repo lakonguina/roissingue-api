@@ -29,6 +29,7 @@ from services.quote_logic import (
     filter_tokens,
     get_best_output,
     quote_biconomy,
+    require_one_shared_slug,
 )
 from services.req import post_json
 
@@ -63,17 +64,19 @@ async def post_quote(
         Body(
             examples=[
                 {
-                    "fromToken": {
-                        "chainId": 10,
-                        "address": "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",
-                    },
+                    "fromToken": [
+                        {
+                            "chainId": 10,
+                            "address": "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",
+                            "amount": "100000",
+                        }
+                    ],
                     "toToken": {"slug": "circle-usd"},
                     "feeToken": {
                         "chainId": 10,
                         "address": "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",
                     },
                     "allowChains": [10, 8453],
-                    "amount": "100000",
                     "fromAddress": "0x6eBf2153f931334714984c7F5a8E574207927Cc7",
                     "toAddress": "0x6eBf2153f931334714984c7F5a8E574207927Cc7",
                 }
@@ -82,6 +85,14 @@ async def post_quote(
     ],
     session: Session = Depends(get_session),
 ):
+    # If there's multiple input token verify they all belong to the same token
+    require_one_shared_slug(session, quote.from_token)
+    match quote.to_token:
+        case TokenQuote():
+            return {"description": "TokenQuote"}
+        case TokenQuoteBySlug():
+            return {"description": "TokenQuote par Slug"}
+    """
     # Check if token exists in the database
     if isinstance(quote.to_token, TokenQuote):
         tokens_to_check = [quote.from_token, quote.fee_token]
@@ -193,6 +204,7 @@ async def post_quote(
                 )
 
             return (await get_best_output(quotes)).quote
+    """
 
 
 @app.post("/execute")

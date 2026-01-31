@@ -9,16 +9,19 @@ class TokenQuote(SQLModel):
     address: str
 
 
+class TokenQuoteWithAmount(TokenQuote):
+    amount: str
+
+
 class TokenQuoteBySlug(SQLModel):
     slug: str
 
 
 class Quote(SQLModel):
-    from_token: TokenQuote = Field(alias="fromToken")
+    from_token: list[TokenQuoteWithAmount] = Field(alias="fromToken", default=[])
     to_token: TokenQuote | TokenQuoteBySlug = Field(alias="toToken")
     fee_token: TokenQuote = Field(alias="feeToken")
     # TODO: Only numerical accepted
-    amount: str = Field()
     # TODO: Add `eth_pydantic_types.Address` as type for both `from_address` and `to_address`
     from_address: str = Field(alias="fromAddress")
     to_address: str = Field(alias="toAddress")

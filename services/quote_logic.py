@@ -8,11 +8,54 @@ from aiocache import cached
 from fastapi import HTTPException
 from sqlmodel import Session
 
-from database import QuotesBest, Token, TokenAddress
+from database import QuotesBest, Token, TokenAddress, TokenQuoteWithAmount
 from queries.token import get_token_by_address, get_token_by_slug
 from services.req import get, post_json
 
 COINGECKO_URL = "https://api.coingecko.com/api/v3/onchain/networks/eth/tokens/0xdac17f958d2ee523a2206206994597c13d831ec7"
+
+
+def require_one_shared_slug(
+    session: Session,
+    pairs: list[TokenQuoteWithAmount],
+) -> str:
+    if len(pairs) > 1:
+        norm_pairs = [(pair.chain_id, pair.address.lower()) for pair in pairs]
+        expected = len(set(norm_pairs))
+
+        matched_stmt = (
+            select(
+                func.count(
+                    func.distinct(tuple_(TokenAddress.chain_id, TokenAddress.address))
+                )
+            )
+            .select_from(TokenAddress)
+            .join(Token, TokenAddress.token_id == Token.id)
+            .where(tuple_(TokenAddress.chain_id, TokenAddress.address).in_(norm_pairs))
+            .where(Token.slug.is_not(None))
+        )
+
+        matched = session.exec(matched_stmt).one()
+
+        if matched != expected:
+            raise HTTPException(
+                status_code=404,
+                detail=f"{expected - matched} token address(es) are not mapped to a token slug",
+            )
+
+        slugs_stmt = (
+            select(Token.slug)
+            .join(TokenAddress, TokenAddress.token_id == Token.id)
+            .where(tuple_(TokenAddress.chain_id, TokenAddress.address).in_(norm_pairs))
+            .where(Token.slug.is_not(None))
+            .distinct()
+        )
+        slugs = session.exec(slugs_stmt).all()
+        if len(slugs) != 1:
+            raise TokenSlugMismatchError(
+                f"Provided pairs map to multiple slugs: {slugs}"
+            )
+        return slugs[0]
 
 
 def filter_tokens(
