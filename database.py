@@ -51,7 +51,7 @@ class Chain(ChainPublic, table=True):
 class TokenBase(SQLModel):
     name: str = Field(unique=True)
     symbol: str = Field(index=True)
-    slug: str = Field(index=True)
+    slug: str = Field(index=True, unique=True)
 
 
 class Token(TokenBase, table=True):

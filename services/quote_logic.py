@@ -9,6 +9,7 @@ from fastapi import HTTPException
 from sqlmodel import Session
 
 from database import QuotesBest, Token, TokenAddress, TokenQuoteWithAmount
+from queries.chain import get_chain_by_id
 from queries.token import get_token_by_address, get_token_by_slug
 from services.req import get, post_json
 
@@ -52,10 +53,21 @@ def require_one_shared_slug(
         )
         slugs = session.exec(slugs_stmt).all()
         if len(slugs) != 1:
-            raise TokenSlugMismatchError(
-                f"Provided pairs map to multiple slugs: {slugs}"
+            raise HTTPException(
+                status_code=404, detail=f"Provided pairs map to multiple slugs: {slugs}"
             )
         return slugs[0]
+
+
+def assert_chains_supported(session: Session, chain_ids: list[int]):
+    # TODO: Can be more performant using one sql statement
+    for chain_id in chain_ids:
+        chain = get_chain_by_id(session, chain_id)
+        if not chain:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Chain with id {chain_id} not supported",
+            )
 
 
 def filter_tokens(

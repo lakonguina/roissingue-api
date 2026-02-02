@@ -24,6 +24,7 @@ from database import (
 )
 from seed import seed_blockchains_and_tokens
 from services.quote_logic import (
+    assert_chains_supported,
     assert_token_address_exists,
     assert_token_slug_exists,
     filter_tokens,
@@ -86,12 +87,22 @@ async def post_quote(
     session: Session = Depends(get_session),
 ):
     # If there's multiple input token verify they all belong to the same token
-    require_one_shared_slug(session, quote.from_token)
+    slug = require_one_shared_slug(session, quote.from_token)
+    # Assert chains are supported by roissingue + biconomy
+    chain_ids = [token.chain_id for token in quote.from_token]
+    chain_ids.append(quote.fee_token.chain_id)
+    if isinstance(quote.to_token, TokenQuote):
+        chain_ids.append(quote.to_token.chain_id)
+    assert_chains_supported(session, chain_ids)
+    # Match quote type
     match quote.to_token:
+        # Output is address + chain_id
         case TokenQuote():
             return {"description": "TokenQuote"}
+        # Output is a slug
         case TokenQuoteBySlug():
             return {"description": "TokenQuote par Slug"}
+
     """
     # Check if token exists in the database
     if isinstance(quote.to_token, TokenQuote):
