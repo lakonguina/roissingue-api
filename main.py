@@ -25,12 +25,10 @@ from database import (
 from seed import seed_blockchains_and_tokens
 from services.quote_logic import (
     assert_chains_supported,
-    assert_token_address_exists,
-    assert_token_slug_exists,
+    build_biconomy_payload,
     filter_tokens,
-    get_best_output,
-    quote_biconomy,
-    require_one_shared_slug,
+    get_token_addresses_by_slug,
+    quote_tokens,
 )
 from services.req import post_json
 
@@ -63,45 +61,83 @@ async def post_quote(
     quote: Annotated[
         Quote,
         Body(
-            examples=[
-                {
-                    "fromToken": [
-                        {
+            openapi_examples={
+                "USDC_by_slug": {
+                    "summary": "To token by slug",
+                    "value": {
+                        "fromToken": [
+                            {
+                                "chainId": 10,
+                                "address": "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",
+                                "amount": "100000",
+                            }
+                        ],
+                        "toToken": {"slug": "wrapped-ethereum"},
+                        "feeToken": {
                             "chainId": 10,
                             "address": "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",
-                            "amount": "100000",
-                        }
-                    ],
-                    "toToken": {"slug": "circle-usd"},
-                    "feeToken": {
-                        "chainId": 10,
-                        "address": "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",
+                        },
+                        "allowChains": [10, 8453],
+                        "fromAddress": "0x6eBf2153f931334714984c7F5a8E574207927Cc7",
+                        "toAddress": "0x6eBf2153f931334714984c7F5a8E574207927Cc7",
                     },
-                    "allowChains": [10, 8453],
-                    "fromAddress": "0x6eBf2153f931334714984c7F5a8E574207927Cc7",
-                    "toAddress": "0x6eBf2153f931334714984c7F5a8E574207927Cc7",
-                }
-            ]
+                },
+                "USDC_crosschain": {
+                    "summary": "To token by chainId/address",
+                    "value": {
+                        "fromToken": [
+                            {
+                                "chainId": 10,
+                                "address": "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",
+                                "amount": "100000",
+                            },
+                            {
+                                "chainId": 1,
+                                "address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+                                "amount": "100000",
+                            },
+                        ],
+                        "toToken": {
+                            "chainId": 8453,
+                            "address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+                        },
+                        "feeToken": {
+                            "chainId": 10,
+                            "address": "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",
+                        },
+                        "allowChains": [10, 8453],
+                        "fromAddress": "0x6eBf2153f931334714984c7F5a8E574207927Cc7",
+                        "toAddress": "0x6eBf2153f931334714984c7F5a8E574207927Cc7",
+                    },
+                },
+            }
         ),
     ],
     session: Session = Depends(get_session),
 ):
-    # If there's multiple input token verify they all belong to the same token
-    slug = require_one_shared_slug(session, quote.from_token)
     # Assert chains are supported by roissingue + biconomy
     chain_ids = [token.chain_id for token in quote.from_token]
     chain_ids.append(quote.fee_token.chain_id)
     if isinstance(quote.to_token, TokenQuote):
         chain_ids.append(quote.to_token.chain_id)
     assert_chains_supported(session, chain_ids)
-    # Match quote type
+
     match quote.to_token:
         # Output is address + chain_id
         case TokenQuote():
-            return {"description": "TokenQuote"}
+            # Build payload
+            payload = build_biconomy_payload(quote, quote.to_token)
+            # Getting quote
+            return await quote_tokens([payload])
         # Output is a slug
         case TokenQuoteBySlug():
-            return {"description": "TokenQuote par Slug"}
+            # Build payloads
+            token_addresses = get_token_addresses_by_slug(session, quote.to_token.slug)
+            payloads = [
+                build_biconomy_payload(quote, to_token) for to_token in token_addresses
+            ]
+            return payloads
+            # return await quote_tokens(payloads)
 
     """
     # Check if token exists in the database

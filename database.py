@@ -28,13 +28,14 @@ class Quote(SQLModel):
     slippage: float = Field(default=0.05, ge=0.0, le=1.0)
     allow_chains: set[int] = Field(alias="allowChains", default=set([]))
     deny_chains: set[int] = Field(alias="denyChains", default=set([]))
-    # TODO: Implement this with verification
-    """
     allow_swap_providers: set[str] = Field(alias="allowSwapProviders", default=set([]))
     deny_swap_providers: set[str] = Field(alias="allowSwapProviders", default=set([]))
-    allow_bridge_providers: set[str] = Field(alias="allowBridgeProviders", default=set([]))
-    deny_bridge_providers: set[str] = Field(alias="allowBridgeProviders", default=set([]))
-    """
+    allow_bridge_providers: set[str] = Field(
+        alias="allowBridgeProviders", default=set([])
+    )
+    deny_bridge_providers: set[str] = Field(
+        alias="allowBridgeProviders", default=set([])
+    )
 
 
 class ChainPublic(SQLModel):

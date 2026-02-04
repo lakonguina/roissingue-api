@@ -6,60 +6,19 @@ from typing import Any
 import httpx
 from aiocache import cached
 from fastapi import HTTPException
-from sqlmodel import Session
+from sqlmodel import Session, select
 
-from database import QuotesBest, Token, TokenAddress, TokenQuoteWithAmount
+from database import Quote, QuotesBest, Token, TokenAddress, TokenQuoteWithAmount
 from queries.chain import get_chain_by_id
 from queries.token import get_token_by_address, get_token_by_slug
 from services.req import get, post_json
 
 COINGECKO_URL = "https://api.coingecko.com/api/v3/onchain/networks/eth/tokens/0xdac17f958d2ee523a2206206994597c13d831ec7"
+BICONOMY_URL = "https://api.biconomy.io/v1/quote"
+BICONOMY_HEADERS = {"Content-Type": "application/json"}
 
 
-def require_one_shared_slug(
-    session: Session,
-    pairs: list[TokenQuoteWithAmount],
-) -> str:
-    if len(pairs) > 1:
-        norm_pairs = [(pair.chain_id, pair.address.lower()) for pair in pairs]
-        expected = len(set(norm_pairs))
-
-        matched_stmt = (
-            select(
-                func.count(
-                    func.distinct(tuple_(TokenAddress.chain_id, TokenAddress.address))
-                )
-            )
-            .select_from(TokenAddress)
-            .join(Token, TokenAddress.token_id == Token.id)
-            .where(tuple_(TokenAddress.chain_id, TokenAddress.address).in_(norm_pairs))
-            .where(Token.slug.is_not(None))
-        )
-
-        matched = session.exec(matched_stmt).one()
-
-        if matched != expected:
-            raise HTTPException(
-                status_code=404,
-                detail=f"{expected - matched} token address(es) are not mapped to a token slug",
-            )
-
-        slugs_stmt = (
-            select(Token.slug)
-            .join(TokenAddress, TokenAddress.token_id == Token.id)
-            .where(tuple_(TokenAddress.chain_id, TokenAddress.address).in_(norm_pairs))
-            .where(Token.slug.is_not(None))
-            .distinct()
-        )
-        slugs = session.exec(slugs_stmt).all()
-        if len(slugs) != 1:
-            raise HTTPException(
-                status_code=404, detail=f"Provided pairs map to multiple slugs: {slugs}"
-            )
-        return slugs[0]
-
-
-def assert_chains_supported(session: Session, chain_ids: list[int]):
+def assert_chains_supported(session: Session, chain_ids: list[int]) -> None:
     # TODO: Can be more performant using one sql statement
     for chain_id in chain_ids:
         chain = get_chain_by_id(session, chain_id)
@@ -68,6 +27,101 @@ def assert_chains_supported(session: Session, chain_ids: list[int]):
                 status_code=404,
                 detail=f"Chain with id {chain_id} not supported",
             )
+
+
+def build_biconomy_payload(
+    quote: Quote,
+    to_token: Any,
+) -> dict[str, Any]:
+    """Build the request payload for Biconomy's quote/compose endpoint.
+
+    Args:
+        quote: Quote.
+
+    Returns:
+        A dict ready to be JSON-encoded and POSTed to Biconomy.
+    """
+    return {
+        "mode": "smart-account",
+        "ownerAddress": quote.from_address,
+        "simulate": False,
+        "feeToken": {
+            "address": quote.fee_token.address,
+            "chainId": quote.fee_token.chain_id,
+        },
+        "composeFlows": [
+            {
+                "type": "/instructions/intent",
+                "data": {
+                    "slippage": 0.01,
+                    "routeSelectionMode": "fast-quote",
+                    "inputPositions": [
+                        {
+                            "chainToken": {
+                                "chainId": ftk.chain_id,
+                                "tokenAddress": ftk.address,
+                            },
+                            "amount": ftk.amount,
+                        }
+                        for ftk in quote.from_token
+                    ],
+                    "targetPositions": [
+                        {
+                            "chainToken": {
+                                "chainId": to_token.chain_id,
+                                "tokenAddress": to_token.address,
+                            },
+                            "weight": 1,
+                        },
+                    ],
+                },
+            },
+            {
+                "type": "/instructions/build",
+                "data": {
+                    "functionSignature": "function transfer(address to, uint256 value)",
+                    "args": [
+                        quote.to_address,
+                        {
+                            "type": "runtimeErc20Balance",
+                            "tokenAddress": to_token.address,
+                            "constraints": {"gte": "1"},
+                        },
+                    ],
+                    "to": to_token.address,
+                    "chainId": to_token.chain_id,
+                },
+            },
+        ],
+    }
+
+
+async def quote_biconomy(
+    client: httpx.AsyncClient,
+    payload: dict[str, Any],
+    biconomy_url: str = BICONOMY_URL,
+    biconomy_headers: dict[str, str] = BICONOMY_HEADERS,
+) -> Any:
+    return await post_json(client, biconomy_url, payload, biconomy_headers)
+
+
+async def quote_token(
+    client: httpx.AsyncClient,
+    payload: dict[str, Any],
+    semaphore: asyncio.Semaphore,
+) -> "QuoteWithData":
+    async with semaphore:
+        return await quote_biconomy(client, payload, BICONOMY_URL, BICONOMY_HEADERS)
+
+
+async def quote_tokens(
+    payloads: list[dict[str, Any]],
+    concurrency: int = 3,
+) -> list["QuoteWithData"]:
+    semaphore = asyncio.Semaphore(concurrency)
+    async with httpx.AsyncClient() as client:
+        jobs = [quote_token(client, payload, semaphore) for payload in payloads]
+        return await asyncio.gather(*jobs)
 
 
 def filter_tokens(
@@ -91,182 +145,38 @@ def filter_tokens(
     return accepted
 
 
-def assert_token_address_exists(
-    session: Session,
-    address: str,
-    chain_id: int,
-) -> TokenAddress:
-    """Fetch a token address.
-
-    Args:
-        session: Active database session.
-        address: Token contract address.
-        chain_id: Chain/network identifier.
-
-    Returns:
-        The matching `TokenAddress`.
-
-    Raises:
-        HTTPException: If the token address is not found for the given chain.
-    """
-    token = get_token_by_address(session, address, chain_id)
-    if not token:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Token {address} not found on chain {chain_id}",
-        )
-    return token
-
-
-def assert_token_slug_exists(
+def get_token_addresses_by_slug(
     session: Session,
     slug: str,
-) -> Token:
-    """Fetch a token by slug.
-
-    Args:
-        session: Active database session.
-        slug: Token slug (unique identifier).
-
-    Returns:
-        The matching `Token`.
-
-    Raises:
-        HTTPException: If no token exists for the provided slug.
-    """
-    token = get_token_by_slug(session, slug)
-    if not token:
+):
+    token_addresses = session.exec(
+        select(TokenAddress)
+        .join(Token, TokenAddress.token_id == Token.id)
+        .where(Token.slug == slug)
+    ).all()
+    if not token_addresses:
         raise HTTPException(
             status_code=404,
-            detail=f"Token not found for slug {slug}",
+            detail=f"Tokens not found for slug {slug}",
         )
-    return token
+    return token_addresses
 
 
-def build_biconomy_payload(
-    from_address: str,
-    to_address: str,
-    from_token_address: str,
-    to_token_address: str,
-    from_chain_id: str,
-    to_chain_id: str,
-    fee_token_address: str,
-    fee_chain_id: str,
-    slippage: float,
-    amount: str,
-) -> dict[str, Any]:
-    """Build the request payload for Biconomy's quote/compose endpoint.
-
-    Args:
-        from_address: Address initiating the quote (owner).
-        to_address: Recipient address on destination.
-        from_token_address: ERC-20 address on source chain.
-        to_token_address: ERC-20 address on destination chain.
-        from_chain_id: Source chain ID (as expected by Biconomy).
-        to_chain_id: Destination chain ID (as expected by Biconomy).
-        fee_token_address: Token address used to pay fees.
-        fee_chain_id: Chain ID where the fee token is paid.
-        slippage: Allowed slippage (typically fraction or percentage depending on API).
-        amount: Input amount (string, usually in base units).
-
-    Returns:
-        A dict ready to be JSON-encoded and POSTed to Biconomy.
-    """
-    return {
-        "mode": "eoa",
-        "ownerAddress": from_address,
-        "simulate": False,
-        "fundingTokens": [
-            {
-                "tokenAddress": from_token_address,
-                "chainId": from_chain_id,
-                "amount": amount,
-            },
-        ],
-        "feeToken": {
-            "address": fee_token_address,
-            "chainId": fee_chain_id,
-        },
-        "composeFlows": [
-            {
-                "type": "/instructions/intent-simple",
-                "data": {
-                    "srcChainId": from_chain_id,
-                    "dstChainId": to_chain_id,
-                    "srcToken": from_token_address,
-                    "dstToken": to_token_address,
-                    "amount": amount,
-                    "slippage": slippage,
-                },
-            },
-            {
-                "type": "/instructions/build",
-                "data": {
-                    "functionSignature": "function transfer(address to, uint256 value)",
-                    "args": [
-                        to_address,
-                        {
-                            "type": "runtimeErc20Balance",
-                            "tokenAddress": to_token_address,
-                            "constraints": {"gte": "1"},
-                        },
-                    ],
-                    "to": to_token_address,
-                    "chainId": to_chain_id,
-                },
-            },
-        ],
-    }
-
-
-async def quote_biconomy(
+async def get_token_data(
     client: httpx.AsyncClient,
-    from_address: str,
-    to_address: str,
-    from_token_address: str,
-    to_token_address: str,
-    from_chain_id: int,
-    to_chain_id: int,
-    fee_token_address: str,
-    fee_chain_id: int,
-    amount: str,
-    slippage: float,
-    biconomy_url: str,
-    biconomy_headers: dict[str, str],
+    chain_slug: str,
+    token_address: str,
+    semaphore: asyncio.Semaphore,
+    biconomy_url: str = BICONOMY_URL,
+    biconomy_headers: dict[str, str] = BICONOMY_HEADERS,
 ) -> Any:
-    """Request a quote from Biconomy and return the parsed JSON response.
-
-    Args:
-        client: An initialized `httpx.AsyncClient`.
-        from_address: Address initiating the quote (owner).
-        to_address: Recipient address on destination.
-        from_token_address: ERC-20 address on source chain.
-        to_token_address: ERC-20 address on destination chain.
-        from_chain_id: Source chain ID.
-        to_chain_id: Destination chain ID.
-        fee_token_address: Token address used to pay fees.
-        fee_chain_id: Chain ID where the fee token is paid.
-        amount: Input amount (string, usually in base units).
-        slippage: Allowed slippage.
-        biconomy_url: Target Biconomy endpoint URL.
-        biconomy_headers: Headers to send to Biconomy (e.g. auth keys).
-
-    Returns:
-        The JSON-decoded response from Biconomy.
-    """
-    payload = build_biconomy_payload(
-        from_address=from_address,
-        to_address=to_address,
-        from_token_address=from_token_address,
-        to_token_address=to_token_address,
-        from_chain_id=from_chain_id,
-        to_chain_id=to_chain_id,
-        fee_token_address=fee_token_address,
-        fee_chain_id=fee_chain_id,
-        amount=amount,
-        slippage=slippage,
-    )
-    return await post_json(client, biconomy_url, payload, biconomy_headers)
+    async with semaphore:
+        coingecko_url = (
+            f"https://api.coingecko.com/api/v3/onchain/networks/"
+            f"{chain_slug}/tokens/{token_address}"
+        )
+        headers = {"x-cg-demo-api-key": "CG-hFX9GPn4qa6FzGtqb2eyGgad"}
+        return await get(client, coingecko_url, headers)
 
 
 async def get_best_output(quotes_best: QuotesBest) -> dict[str, Any]:
