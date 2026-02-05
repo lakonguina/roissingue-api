@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "aiocache>=0.12.3",
+    "fastapi-cache2[memcache]>=0.2.2",
     "fastapi[standard]>=0.128.0",
     "httpx>=0.28.1",
     "requests>=2.32.5",
