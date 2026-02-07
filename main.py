@@ -3,12 +3,10 @@ from contextlib import asynccontextmanager
 from typing import Annotated, AsyncIterator
 
 import httpx
-from fastapi import Body, Depends, FastAPI, HTTPException
+from fastapi import Body, Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi_cache import FastAPICache
-from fastapi_cache.backends.inmemory import InMemoryBackend
-from fastapi_cache.decorator import cache
 from sqlalchemy import exc
+from sqlalchemy.orm import selectinload, with_loader_criteria
 from sqlmodel import Session, select
 
 from database import (
@@ -20,6 +18,7 @@ from database import (
     QuotesBest,
     QuoteWithData,
     Token,
+    TokenAddress,
     TokenPublic,
     TokenQuote,
     TokenQuoteBySlug,
@@ -30,7 +29,9 @@ from seed import seed_blockchains_and_tokens
 from services.quote_logic import (
     assert_chains_supported,
     build_biconomy_payload,
+    fetch_coingecko_token_data,
     filter_tokens,
+    get_best_output,
     get_token_addresses_by_slug,
     quote_tokens,
 )
@@ -41,13 +42,7 @@ BICONOMY_EXECUTE_URL = "https://api.biconomy.io/v1/execute"
 BICONOMY_HEADERS = {"Content-Type": "application/json"}
 
 
-@asynccontextmanager
-async def lifespan(_: FastAPI) -> AsyncIterator[None]:
-    FastAPICache.init(InMemoryBackend())
-    yield
-
-
-app = FastAPI(lifespan=lifespan)
+app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
@@ -138,7 +133,12 @@ async def post_quote(
             # Build payload
             payload = build_biconomy_payload(quote, quote.to_token)
             # Getting quote
-            return await quote_tokens([payload])
+            quotes = await quote_tokens([payload])
+            best = await get_best_output(
+                session, QuotesBest(quotes=quotes, fee_token=quote.fee_token)
+            )
+            return best.quote
+
         # Output is a slug
         case TokenQuoteBySlug():
             # Build payloads
@@ -146,22 +146,21 @@ async def post_quote(
             payloads = [
                 build_biconomy_payload(quote, to_token) for to_token in token_addresses
             ]
-            return await quote_tokens(payloads)
+            print(payloads)
+            quotes = await quote_tokens(payloads)
+            best = await get_best_output(
+                session, QuotesBest(quotes=quotes, fee_token=quote.fee_token)
+            )
+            return best.quote
 
 
 @app.post("/token/{chain_slug}/{token_address}/price/usd")
-@cache(expire=60 * 60)
 async def get_token_price(
     chain_slug: str,
     token_address: str,
 ):
-    async with httpx.AsyncClient() as client:
-        coingecko_url = (
-            f"https://api.coingecko.com/api/v3/onchain/networks/"
-            f"{chain_slug}/tokens/{token_address}"
-        )
-        headers = {"x-cg-demo-api-key": "CG-hFX9GPn4qa6FzGtqb2eyGgad"}
-        return await get(client, coingecko_url, headers)
+    # Reuse the same shared cached helper as `get_best_output`
+    return await fetch_coingecko_token_data(chain_slug, token_address)
 
 
 @app.post("/execute")
@@ -175,9 +174,27 @@ async def execute(data: Execute, session: Session = Depends(get_session)):
         )
 
 
-@app.get("/tokens", response_model=list[TokenPublic])
-async def get_tokens(session: Session = Depends(get_session)):
-    return session.exec(select(Token)).all()
+@app.post("/tokens", response_model=list[TokenPublic])
+async def get_tokens(
+    session: Session = Depends(get_session),
+    chain_ids: Annotated[set[int] | None, Query()] = None,
+):
+    statement = select(Token).options(
+        selectinload(Token.addresses).selectinload(TokenAddress.chain),
+    )
+    if chain_ids:
+        statement = statement.where(
+            # Return tokens that have at least one of them chains
+            Token.addresses.any(TokenAddress.chain_id.in_(chain_ids))
+        ).options(
+            # Only load addresses on those chains
+            with_loader_criteria(
+                TokenAddress,
+                TokenAddress.chain_id.in_(chain_ids),
+                include_aliases=True,
+            )
+        )
+    return session.exec(statement).all()
 
 
 @app.get("/chains", response_model=list[ChainPublic])

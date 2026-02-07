@@ -86,12 +86,12 @@ class TokenPublic(TokenBase):
 
 class QuoteWithData(SQLModel):
     quote: dict[str, Any]
-    to_token: TokenAddress
+    to_token: TokenAddress | TokenQuote
 
 
 class QuotesBest(SQLModel):
     quotes: list[QuoteWithData]
-    fee_token: TokenAddress
+    fee_token: TokenQuote
 
 
 class QuotePublic(SQLModel):
