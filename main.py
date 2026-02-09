@@ -174,7 +174,7 @@ async def execute(data: Execute, session: Session = Depends(get_session)):
         )
 
 
-@app.post("/tokens", response_model=list[TokenPublic])
+@app.get("/tokens", response_model=list[TokenPublic])
 async def get_tokens(
     session: Session = Depends(get_session),
     chain_ids: Annotated[set[int] | None, Query()] = None,
