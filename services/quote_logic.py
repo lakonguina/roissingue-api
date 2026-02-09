@@ -137,49 +137,84 @@ def build_biconomy_payload(
     quote: Quote,
     to_token: Any,
 ) -> dict[str, Any]:
-    """Build the request payload for Biconomy's quote/compose endpoint.
+    """Build the request payload for Biconomy's quote/compose endpoint in EOA mode.
 
     Args:
-        quote: Quote.
+        quote: Quote object containing from_token (single token), to_token, fee_token, etc.
+        to_token: The destination token (TokenAddress or TokenQuote).
 
     Returns:
         A dict ready to be JSON-encoded and POSTed to Biconomy.
     """
+    # Build fundingTokens array with from_token and fee_token
+    funding_tokens = [
+        {
+            "tokenAddress": quote.from_token.address,
+            "chainId": quote.from_token.chain_id,
+            "amount": quote.from_token.amount,
+        }
+    ]
+
+    # Add fee_token to funding tokens if it's different from from_token
+    if not (
+        quote.fee_token.address.lower() == quote.from_token.address.lower()
+        and quote.fee_token.chain_id == quote.from_token.chain_id
+    ):
+        funding_tokens.append(
+            {
+                "tokenAddress": quote.fee_token.address,
+                "chainId": quote.fee_token.chain_id,
+            }
+        )
+
+    # Convert deny/allow lists to comma-separated strings
+    deny_swap_providers = (
+        ",".join(quote.deny_swap_providers) if quote.deny_swap_providers else None
+    )
+    deny_bridge_providers = (
+        ",".join(quote.deny_bridge_providers) if quote.deny_bridge_providers else None
+    )
+    allow_swap_providers = (
+        ",".join(quote.allow_swap_providers) if quote.allow_swap_providers else None
+    )
+    allow_bridge_providers = (
+        ",".join(quote.allow_bridge_providers) if quote.allow_bridge_providers else None
+    )
+
+    # Build intent-simple data
+    intent_data = {
+        "srcChainId": quote.from_token.chain_id,
+        "dstChainId": to_token.chain_id,
+        "srcToken": quote.from_token.address,
+        "dstToken": to_token.address,
+        "amount": quote.from_token.amount,
+        "slippage": quote.slippage,
+    }
+
+    # Add optional deny/allow providers
+    if deny_swap_providers:
+        intent_data["denySwapProviders"] = deny_swap_providers
+    if deny_bridge_providers:
+        intent_data["denyBridgeProviders"] = deny_bridge_providers
+    if allow_swap_providers:
+        intent_data["allowSwapProviders"] = allow_swap_providers
+    if allow_bridge_providers:
+        intent_data["allowBridgeProviders"] = allow_bridge_providers
+
     return QuoteWithData(
         quote={
-            "mode": "smart-account",
+            "mode": quote.mode,
             "ownerAddress": quote.from_address,
             "simulate": False,
+            "fundingTokens": funding_tokens,
             "feeToken": {
                 "address": quote.fee_token.address,
                 "chainId": quote.fee_token.chain_id,
             },
             "composeFlows": [
                 {
-                    "type": "/instructions/intent",
-                    "data": {
-                        "slippage": 0.01,
-                        "routeSelectionMode": "fast-quote",
-                        "inputPositions": [
-                            {
-                                "chainToken": {
-                                    "chainId": ftk.chain_id,
-                                    "tokenAddress": ftk.address,
-                                },
-                                "amount": ftk.amount,
-                            }
-                            for ftk in quote.from_token
-                        ],
-                        "targetPositions": [
-                            {
-                                "chainToken": {
-                                    "chainId": to_token.chain_id,
-                                    "tokenAddress": to_token.address,
-                                },
-                                "weight": 1,
-                            },
-                        ],
-                    },
+                    "type": "/instructions/intent-simple",
+                    "data": intent_data,
                 },
                 {
                     "type": "/instructions/build",

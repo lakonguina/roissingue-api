@@ -71,49 +71,41 @@ async def post_quote(
                 "USDC_by_slug": {
                     "summary": "To token by slug",
                     "value": {
-                        "fromToken": [
-                            {
-                                "chainId": 10,
-                                "address": "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",
-                                "amount": "100000",
-                            }
-                        ],
-                        "toToken": {"slug": "wrapped-ethereum"},
-                        "feeToken": {
-                            "chainId": 10,
-                            "address": "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",
+                        "fromToken": {
+                            "chainId": 8453,
+                            "address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+                            "amount": "100000000",
                         },
-                        "allowChains": [10, 8453],
-                        "fromAddress": "0x6eBf2153f931334714984c7F5a8E574207927Cc7",
-                        "toAddress": "0x6eBf2153f931334714984c7F5a8E574207927Cc7",
-                    },
-                },
-                "USDC_crosschain": {
-                    "summary": "To token by chainId/address",
-                    "value": {
-                        "fromToken": [
-                            {
-                                "chainId": 10,
-                                "address": "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",
-                                "amount": "100000",
-                            },
-                            {
-                                "chainId": 1,
-                                "address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
-                                "amount": "100000",
-                            },
-                        ],
-                        "toToken": {
+                        "toToken": {"slug": "circle-usd"},
+                        "feeToken": {
                             "chainId": 8453,
                             "address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
                         },
-                        "feeToken": {
-                            "chainId": 10,
-                            "address": "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",
-                        },
-                        "allowChains": [10, 8453],
                         "fromAddress": "0x6eBf2153f931334714984c7F5a8E574207927Cc7",
                         "toAddress": "0x6eBf2153f931334714984c7F5a8E574207927Cc7",
+                        "slippage": 0.01,
+                    },
+                },
+                "USDC_crosschain": {
+                    "summary": "To token by chainId/address (cross-chain)",
+                    "value": {
+                        "fromToken": {
+                            "chainId": 8453,
+                            "address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+                            "amount": "100000000",
+                        },
+                        "toToken": {
+                            "chainId": 10,
+                            "address": "0x94b008aa00579c1307b0ef2c499ad98a8ce58e58",
+                        },
+                        "feeToken": {
+                            "chainId": 8453,
+                            "address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+                        },
+                        "fromAddress": "0x6eBf2153f931334714984c7F5a8E574207927Cc7",
+                        "toAddress": "0x6eBf2153f931334714984c7F5a8E574207927Cc7",
+                        "slippage": 0.01,
+                        "denySwapProviders": ["gluex"],
                     },
                 },
             }
@@ -122,11 +114,12 @@ async def post_quote(
     session: Session = Depends(get_session),
 ):
     # Assert chains are supported by roissingue + biconomy
-    chain_ids = [token.chain_id for token in quote.from_token]
-    chain_ids.append(quote.fee_token.chain_id)
+    chain_ids = [quote.from_token.chain_id, quote.fee_token.chain_id]
     if isinstance(quote.to_token, TokenQuote):
         chain_ids.append(quote.to_token.chain_id)
+
     assert_chains_supported(session, chain_ids)
+
     match quote.to_token:
         # Output is address + chain_id
         case TokenQuote():

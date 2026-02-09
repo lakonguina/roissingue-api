@@ -18,7 +18,9 @@ class TokenQuoteBySlug(SQLModel):
 
 
 class Quote(SQLModel):
-    from_token: list[TokenQuoteWithAmount] = Field(alias="fromToken", default=[])
+    from_token: TokenQuoteWithAmount = Field(
+        alias="fromToken"
+    )  # Changed from list to single token
     to_token: TokenQuote | TokenQuoteBySlug = Field(alias="toToken")
     fee_token: TokenQuote = Field(alias="feeToken")
     # TODO: Only numerical accepted
@@ -26,15 +28,16 @@ class Quote(SQLModel):
     from_address: str = Field(alias="fromAddress")
     to_address: str = Field(alias="toAddress")
     slippage: float = Field(default=0.05, ge=0.0, le=1.0)
+    mode: str = Field(default="eoa")  # Added mode field with default "eoa"
     allow_chains: set[int] = Field(alias="allowChains", default=set([]))
     deny_chains: set[int] = Field(alias="denyChains", default=set([]))
     allow_swap_providers: set[str] = Field(alias="allowSwapProviders", default=set([]))
-    deny_swap_providers: set[str] = Field(alias="allowSwapProviders", default=set([]))
+    deny_swap_providers: set[str] = Field(alias="denySwapProviders", default=set([]))
     allow_bridge_providers: set[str] = Field(
         alias="allowBridgeProviders", default=set([])
     )
     deny_bridge_providers: set[str] = Field(
-        alias="allowBridgeProviders", default=set([])
+        alias="denyBridgeProviders", default=set([])
     )
 
 
