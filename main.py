@@ -1,6 +1,6 @@
 import asyncio
 from contextlib import asynccontextmanager
-from typing import Annotated, AsyncIterator
+from typing import Annotated, Any, AsyncIterator
 
 import httpx
 from fastapi import Body, Depends, FastAPI, HTTPException, Query
@@ -40,6 +40,8 @@ from services.req import get, post_json
 BICONOMY_URL = "https://api.biconomy.io/v1/quote"
 BICONOMY_EXECUTE_URL = "https://api.biconomy.io/v1/execute"
 BICONOMY_HEADERS = {"Content-Type": "application/json"}
+BICONOMY_API_KEY = "mee_RF4dnHspTkZuPaG2jRrcTy"
+BICONOMY_EXPLORER_BASE = "https://network.biconomy.io/v1/explorer"
 
 
 app = FastAPI()
@@ -193,3 +195,19 @@ async def get_tokens(
 @app.get("/chains", response_model=list[ChainPublic])
 async def get_chains(session: Session = Depends(get_session)):
     return session.exec(select(Chain)).all()
+
+
+@app.get("/status/{hash}")
+async def get_status(hash: str) -> dict[str, Any]:
+    url = f"{BICONOMY_EXPLORER_BASE}/{hash}"
+    headers = {
+        "X-API-Key": BICONOMY_API_KEY,
+    }
+    async with httpx.AsyncClient() as client:
+        try:
+            return await get(client, url, headers)
+        except Exception:
+            raise HTTPException(
+                status_code=500,
+                detail="Unexpected error",
+            )
