@@ -27,13 +27,13 @@ async def get_biconomy_status(
         except httpx.HTTPError as e:
             raise HTTPException(
                 status_code=502,
-                detail=f"Failed to fetch status from Biconomy: {str(e)}",
-            ) from e
+                detail=f"Failed to fetch status from Biconomy",
+            )
         except Exception as e:
             raise HTTPException(
                 status_code=500,
-                detail=f"Unexpected error while getting status: {str(e)}",
-            ) from e
+                detail=f"Unexpected error while getting status",
+            )
 
 
 async def post_biconomy_quote(

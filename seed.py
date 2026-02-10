@@ -122,4 +122,5 @@ def seed_blockchains_and_tokens() -> None:
             token_addresses = _seed_token_addresses(chains=chains, tokens=tokens)
             _add_all(session, token_addresses)
     except exc.IntegrityError:
-        print("Already seeded")
+        # Data already exists, silently skip
+        pass

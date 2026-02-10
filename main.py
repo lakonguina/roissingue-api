@@ -1,3 +1,5 @@
+"""FastAPI application entry point with database initialization and seeding."""
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
