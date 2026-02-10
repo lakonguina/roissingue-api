@@ -5,7 +5,7 @@ from typing import Any
 import httpx
 
 
-async def post_json(
+async def post(
     client: httpx.AsyncClient,
     url: str,
     payload: dict[str, Any],

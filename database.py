@@ -18,9 +18,7 @@ class TokenQuoteBySlug(SQLModel):
 
 
 class Quote(SQLModel):
-    from_token: TokenQuoteWithAmount = Field(
-        alias="fromToken"
-    )  # Changed from list to single token
+    from_token: TokenQuoteWithAmount = Field(alias="fromToken")
     to_token: TokenQuote | TokenQuoteBySlug = Field(alias="toToken")
     fee_token: TokenQuote = Field(alias="feeToken")
     # TODO: Only numerical accepted

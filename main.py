@@ -25,17 +25,18 @@ from database import (
     create_db_and_tables,
     get_session,
 )
+from model.execute import ExecuteResponse
+from model.status import StatusResponse
 from seed import seed_blockchains_and_tokens
 from services.quote_logic import (
     assert_chains_supported,
     build_biconomy_payload,
-    fetch_coingecko_token_data,
     filter_tokens,
     get_best_output,
     get_token_addresses_by_slug,
     quote_tokens,
 )
-from services.req import get, post_json
+from services.request import get, post
 
 BICONOMY_URL = "https://api.biconomy.io/v1/quote"
 BICONOMY_EXECUTE_URL = "https://api.biconomy.io/v1/execute"
@@ -119,9 +120,7 @@ async def post_quote(
     chain_ids = [quote.from_token.chain_id, quote.fee_token.chain_id]
     if isinstance(quote.to_token, TokenQuote):
         chain_ids.append(quote.to_token.chain_id)
-
     assert_chains_supported(session, chain_ids)
-
     match quote.to_token:
         # Output is address + chain_id
         case TokenQuote():
@@ -133,7 +132,6 @@ async def post_quote(
                 session, QuotesBest(quotes=quotes, fee_token=quote.fee_token)
             )
             return best.quote
-
         # Output is a slug
         case TokenQuoteBySlug():
             # Build payloads
@@ -149,17 +147,8 @@ async def post_quote(
             return best.quote
 
 
-@app.post("/token/{chain_slug}/{token_address}/price/usd")
-async def get_token_price(
-    chain_slug: str,
-    token_address: str,
-):
-    # Reuse the same shared cached helper as `get_best_output`
-    return await fetch_coingecko_token_data(chain_slug, token_address)
-
-
-@app.post("/execute")
-async def execute(data: Execute, session: Session = Depends(get_session)):
+@app.post("/execute", response_model=ExecuteResponse)
+async def post_execute(data: Execute, session: Session = Depends(get_session)):
     async with httpx.AsyncClient() as client:
         return await post_json(
             client,
@@ -197,16 +186,17 @@ async def get_chains(session: Session = Depends(get_session)):
     return session.exec(select(Chain)).all()
 
 
-@app.get("/status/{hash}")
-async def get_status(hash: str) -> dict[str, Any]:
-    url = f"{BICONOMY_EXPLORER_BASE}/{hash}"
+@app.get("/status/{supertxHash}", response_model=StatusResponse)
+async def get_status(supertxHash: str) -> dict[str, Any]:
+    url = f"{BICONOMY_EXPLORER_BASE}/{supertxHash}"
     headers = {
         "X-API-Key": BICONOMY_API_KEY,
     }
     async with httpx.AsyncClient() as client:
         try:
             return await get(client, url, headers)
-        except Exception:
+        except Exception as e:
+            print(e)
             raise HTTPException(
                 status_code=500,
                 detail="Unexpected error",

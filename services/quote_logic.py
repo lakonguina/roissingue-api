@@ -19,7 +19,7 @@ from database import (
 )
 from queries.chain import get_chain_by_id
 from queries.token import get_token_by_address, get_token_by_slug
-from services.req import get, post_json
+from services.request import get, post
 
 COINGECKO_URL = "https://api.coingecko.com/api/v3/onchain/networks/eth/tokens/0xdac17f958d2ee523a2206206994597c13d831ec7"
 BICONOMY_URL = "https://api.biconomy.io/v1/quote"
@@ -245,7 +245,7 @@ async def quote_biconomy(
     biconomy_headers: dict[str, str] = BICONOMY_HEADERS,
 ) -> Any:
     return QuoteWithData(
-        quote=await post_json(client, biconomy_url, payload.quote, biconomy_headers),
+        quote=await post(client, biconomy_url, payload.quote, biconomy_headers),
         to_token=payload.to_token,
     )
 
