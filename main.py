@@ -6,29 +6,25 @@ import httpx
 from fastapi import Body, Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import exc
-from sqlalchemy.orm import selectinload, with_loader_criteria
-from sqlmodel import Session, select
+from sqlmodel import Session
 
-from database import (
-    Chain,
-    ChainPublic,
-    Execute,
+from database import create_db_and_tables, get_session
+from model.chain import Chain, ChainOut
+from model.execute import ExecuteIn, ExecuteOut
+from model.quote import (
     Quote,
     QuotePublic,
     QuotesBest,
     QuoteWithData,
-    Token,
-    TokenAddress,
-    TokenPublic,
     TokenQuote,
     TokenQuoteBySlug,
-    create_db_and_tables,
-    get_session,
 )
-from model.execute import ExecuteResponse
-from model.status import StatusResponse
+from model.status import StatusOut
+from model.token import TokenPublic
+from queries.chain import get_chains
+from queries.token import get_tokens
 from seed import seed_blockchains_and_tokens
-from services.quote_logic import (
+from services.quote import (
     assert_chains_supported,
     build_biconomy_payload,
     filter_tokens,
@@ -147,8 +143,8 @@ async def post_quote(
             return best.quote
 
 
-@app.post("/execute", response_model=ExecuteResponse)
-async def post_execute(data: Execute, session: Session = Depends(get_session)):
+@app.post("/execute", response_model=ExecuteOut)
+async def post_execute(data: ExecuteIn, session: Session = Depends(get_session)):
     async with httpx.AsyncClient() as client:
         return await post_json(
             client,
@@ -159,34 +155,19 @@ async def post_execute(data: Execute, session: Session = Depends(get_session)):
 
 
 @app.get("/tokens", response_model=list[TokenPublic])
-async def get_tokens(
+async def get_token(
     session: Session = Depends(get_session),
     chain_ids: Annotated[set[int] | None, Query()] = None,
 ):
-    statement = select(Token).options(
-        selectinload(Token.addresses).selectinload(TokenAddress.chain),
-    )
-    if chain_ids:
-        statement = statement.where(
-            # Return tokens that have at least one of them chains
-            Token.addresses.any(TokenAddress.chain_id.in_(chain_ids))
-        ).options(
-            # Only load addresses on those chains
-            with_loader_criteria(
-                TokenAddress,
-                TokenAddress.chain_id.in_(chain_ids),
-                include_aliases=True,
-            )
-        )
-    return session.exec(statement).all()
+    return get_tokens(session, chain_ids)
 
 
-@app.get("/chains", response_model=list[ChainPublic])
-async def get_chains(session: Session = Depends(get_session)):
-    return session.exec(select(Chain)).all()
+@app.get("/chains", response_model=list[ChainOut])
+async def get_chain(session: Session = Depends(get_session)):
+    return get_chains(session)
 
 
-@app.get("/status/{supertxHash}", response_model=StatusResponse)
+@app.get("/status/{supertxHash}", response_model=StatusOut)
 async def get_status(supertxHash: str) -> dict[str, Any]:
     url = f"{BICONOMY_EXPLORER_BASE}/{supertxHash}"
     headers = {

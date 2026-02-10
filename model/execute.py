@@ -1,7 +1,14 @@
+from typing import Any
+
 from sqlmodel import Field, SQLModel
 
 
-class ExecuteResponse(SQLModel):
+class ExecuteIn(SQLModel):
+    quote: dict[str, Any] = Field()
+    payload_to_sign: list[dict[str, Any]] = Field(alias="payloadToSign")
+
+
+class ExecuteOut(SQLModel):
     success: bool = Field(
         description="Indicates if the supertransaction execution was successful."
     )

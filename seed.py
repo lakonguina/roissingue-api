@@ -12,7 +12,9 @@ from typing import Sequence
 
 from sqlmodel import Session
 
-from database import Chain, Token, TokenAddress, engine
+from database import engine
+from model.chain import Chain
+from model.token import Token, TokenAddress
 
 
 def _add_all(session: Session, items: Iterable[object]) -> None:

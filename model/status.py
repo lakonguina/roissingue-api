@@ -107,7 +107,7 @@ class Trigger(SQLModel):
     chainId: str
 
 
-class StatusResponse(SQLModel):
+class StatusOut(SQLModel):
     """Complete super transaction details including payment info, user operations, and trigger."""
 
     itxHash: str
