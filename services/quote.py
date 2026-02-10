@@ -14,13 +14,10 @@ from model.token import Token, TokenAddress
 from queries.chain import get_chain_by_id
 from queries.token import get_token_by_address, get_token_by_slug
 from services.request import get, post
+from settings import settings
 
-COINGECKO_URL = "https://api.coingecko.com/api/v3/onchain/networks/eth/tokens/0xdac17f958d2ee523a2206206994597c13d831ec7"
 BICONOMY_URL = "https://api.biconomy.io/v1/quote"
 BICONOMY_HEADERS = {"Content-Type": "application/json"}
-
-
-COINGECKO_API_KEY = "CG-hFX9GPn4qa6FzGtqb2eyGgad"
 
 
 def _norm_addr(addr: str) -> str:
@@ -29,7 +26,9 @@ def _norm_addr(addr: str) -> str:
 
 @cached(ttl=60 * 30)
 async def fetch_coingecko_token_data(
-    chain_slug: str, token_address: str
+    chain_slug: str,
+    token_address: str,
+    header: dict[str, str] = settings.coingecko_header,
 ) -> dict[str, Any]:
     """Fetch token metadata + USD price from CoinGecko Onchain endpoint.
 
@@ -40,9 +39,8 @@ async def fetch_coingecko_token_data(
         f"https://api.coingecko.com/api/v3/onchain/networks/"
         f"{chain_slug}/tokens/{token_address}"
     )
-    headers = {"x-cg-demo-api-key": COINGECKO_API_KEY}
     async with httpx.AsyncClient() as client:
-        return await get(client, coingecko_url, headers)
+        return await get(client, coingecko_url, header)
 
 
 async def fetch_coingecko_token_data_by_chain_id(
@@ -183,6 +181,7 @@ def build_biconomy_payload(
         "dstToken": to_token.address,
         "amount": quote.from_token.amount,
         "slippage": quote.slippage,
+        "routeSelectionMode": "fast-quote",
     }
 
     # Add optional deny/allow providers
@@ -235,11 +234,11 @@ def build_biconomy_payload(
 async def quote_biconomy(
     client: httpx.AsyncClient,
     payload: dict[str, Any],
-    biconomy_url: str = BICONOMY_URL,
-    biconomy_headers: dict[str, str] = BICONOMY_HEADERS,
+    url: str = settings.biconomy_quote,
+    header: dict[str, str] = settings.biconomy_header,
 ) -> Any:
     return QuoteWithData(
-        quote=await post(client, biconomy_url, payload.quote, biconomy_headers),
+        quote=await post(client, url, payload.quote, header),
         to_token=payload.to_token,
     )
 

@@ -5,7 +5,6 @@ from typing import Annotated, Any, AsyncIterator
 import httpx
 from fastapi import Body, Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import exc
 from sqlmodel import Session
 
 from database import create_db_and_tables, get_session
@@ -24,6 +23,7 @@ from model.token import TokenPublic
 from queries.chain import get_chains
 from queries.token import get_tokens
 from seed import seed_blockchains_and_tokens
+from services.biconomy import get_biconomy_status, post_biconomy_quote
 from services.quote import (
     assert_chains_supported,
     build_biconomy_payload,
@@ -33,13 +33,6 @@ from services.quote import (
     quote_tokens,
 )
 from services.request import get, post
-
-BICONOMY_URL = "https://api.biconomy.io/v1/quote"
-BICONOMY_EXECUTE_URL = "https://api.biconomy.io/v1/execute"
-BICONOMY_HEADERS = {"Content-Type": "application/json"}
-BICONOMY_API_KEY = "mee_RF4dnHspTkZuPaG2jRrcTy"
-BICONOMY_EXPLORER_BASE = "https://network.biconomy.io/v1/explorer"
-
 
 app = FastAPI()
 
@@ -55,10 +48,7 @@ app.add_middleware(
 @app.on_event("startup")
 def on_startup():
     create_db_and_tables()
-    try:
-        seed_blockchains_and_tokens()
-    except exc.IntegrityError:
-        print("Already seeded")
+    seed_blockchains_and_tokens()
 
 
 @app.post("/quote")
@@ -145,13 +135,7 @@ async def post_quote(
 
 @app.post("/execute", response_model=ExecuteOut)
 async def post_execute(data: ExecuteIn, session: Session = Depends(get_session)):
-    async with httpx.AsyncClient() as client:
-        return await post_json(
-            client,
-            BICONOMY_EXECUTE_URL,
-            {**data.quote, "payloadToSign": data.payload_to_sign},
-            BICONOMY_HEADERS,
-        )
+    return post_biconomy_quote(data)
 
 
 @app.get("/tokens", response_model=list[TokenPublic])
@@ -169,16 +153,4 @@ async def get_chain(session: Session = Depends(get_session)):
 
 @app.get("/status/{supertxHash}", response_model=StatusOut)
 async def get_status(supertxHash: str) -> dict[str, Any]:
-    url = f"{BICONOMY_EXPLORER_BASE}/{supertxHash}"
-    headers = {
-        "X-API-Key": BICONOMY_API_KEY,
-    }
-    async with httpx.AsyncClient() as client:
-        try:
-            return await get(client, url, headers)
-        except Exception as e:
-            print(e)
-            raise HTTPException(
-                status_code=500,
-                detail="Unexpected error",
-            )
+    return await get_biconomy_status(supertxHash)

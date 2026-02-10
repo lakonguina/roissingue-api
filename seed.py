@@ -10,6 +10,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import Sequence
 
+from sqlalchemy import exc
 from sqlmodel import Session
 
 from database import engine
@@ -110,12 +111,15 @@ def seed_blockchains_and_tokens() -> None:
     This performs the inserts in three steps (chains, tokens, token addresses),
     committing once per step.
     """
-    with Session(engine) as session:
-        chains = _seed_chains()
-        _add_all(session, chains)
+    try:
+        with Session(engine) as session:
+            chains = _seed_chains()
+            _add_all(session, chains)
 
-        tokens = _seed_tokens()
-        _add_all(session, tokens)
+            tokens = _seed_tokens()
+            _add_all(session, tokens)
 
-        token_addresses = _seed_token_addresses(chains=chains, tokens=tokens)
-        _add_all(session, token_addresses)
+            token_addresses = _seed_token_addresses(chains=chains, tokens=tokens)
+            _add_all(session, token_addresses)
+    except exc.IntegrityError:
+        print("Already seeded")

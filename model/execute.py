@@ -12,9 +12,10 @@ class ExecuteOut(SQLModel):
     success: bool = Field(
         description="Indicates if the supertransaction execution was successful."
     )
-    supertxHash: str | None = Field(
+    supertx_hash: str | None = Field(
         default=None,
         description="The transaction hash of the executed supertransaction, or null if not available.",
+        alias="supertxHash",
     )
     error: str | None = Field(
         default=None,
