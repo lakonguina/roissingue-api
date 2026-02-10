@@ -9,10 +9,10 @@ from aiocache import cached
 from fastapi import HTTPException
 from sqlmodel import Session, select
 
-from model.quote import Quote, QuotesBest, QuoteWithData, TokenQuoteWithAmount
+from model.quote import Quote, QuotesBest, QuoteWithData
 from model.token import Token, TokenAddress
 from queries.chain import get_chain_by_id
-from queries.token import get_token_by_address, get_token_by_slug
+from queries.token import get_token_by_address
 from services.request import get, post
 from settings import settings
 
