@@ -8,9 +8,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     """Application configuration loaded from environment variables."""
 
-    biconomy_execute: HttpUrl = "https://api.biconomy.io/v1/execute"
-    biconomy_quote: HttpUrl = "https://api.biconomy.io/v1/quote"
-    biconomy_explorer: HttpUrl = "https://network.biconomy.io/v1/explorer"
+    biconomy_execute: str = "https://api.biconomy.io/v1/execute"
+    biconomy_quote: str = "https://api.biconomy.io/v1/quote"
+    biconomy_explorer: str = "https://network.biconomy.io/v1/explorer"
     biconomy_api_key: str
     coingecko_api_key: str
 

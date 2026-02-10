@@ -223,7 +223,7 @@ async def quote_token(
     client: httpx.AsyncClient,
     payload: dict[str, Any],
     semaphore: asyncio.Semaphore,
-    url: str = settings.biconomiy_quote,
+    url: str = settings.biconomy_quote,
     headers: dict[str, str] | None = None,
 ) -> QuoteWithData:
     """Request a single token quote with concurrency control."""

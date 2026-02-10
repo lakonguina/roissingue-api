@@ -26,13 +26,14 @@ interface QuoteResponse {
 }
 
 async function main() {
-  const res = await fetch("http://127.0.0.1:8000/quote", {
+  const res = await fetch("http://127.0.0.1:8000/v1/quote", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       fromToken: {
         chainId: 10,
         address: "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",
+        amount: "100000",
       },
       toToken: { slug: "wrapped-ethereum" },
       feeToken: {
@@ -40,7 +41,6 @@ async function main() {
         address: "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",
       },
       allowChains: [10, 8453],
-      amount: "100000",
       fromAddress: account.address,
       toAddress: account.address,
     }),
@@ -60,7 +60,7 @@ async function main() {
     payloadToSign[i] = { ...payloadToSign[i], signature };
   }
 
-  const execRes = await fetch("http://127.0.0.1:8000/execute", {
+  const execRes = await fetch("http://127.0.0.1:8000/v1/execute", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ quote: quoteResponse, payloadToSign }),

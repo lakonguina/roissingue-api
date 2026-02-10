@@ -6,12 +6,7 @@ from sqlmodel import Session
 from database import get_session
 from model.chain import ChainOut
 from model.execute import ExecuteIn, ExecuteOut
-from model.quote import (
-    Quote,
-    QuotesBest,
-    TokenQuote,
-    TokenQuoteBySlug,
-)
+from model.quote import Quote, QuotesBest, TokenQuote, TokenQuoteBySlug
 from model.status import StatusOut
 from model.token import TokenPublic
 from queries.chain import get_chains
@@ -128,7 +123,7 @@ async def post_execute(
     ],
     session: Session = Depends(get_session),
 ):
-    return post_biconomy_quote(data)
+    return await post_biconomy_quote(data)
 
 
 @router.get("/tokens", response_model=list[TokenPublic])
