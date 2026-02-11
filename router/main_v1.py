@@ -97,7 +97,6 @@ async def post_quote(
             payloads = [
                 build_biconomy_payload(quote, to_token) for to_token in token_addresses
             ]
-            print(payloads)
             quotes = await quote_tokens(payloads)
             best = await get_best_output(
                 session, QuotesBest(quotes=quotes, fee_token=quote.fee_token)
@@ -139,6 +138,6 @@ async def get_chain(session: Session = Depends(get_session)):
     return get_chains(session)
 
 
-@router.get("/status/{supertxHash}", response_model=StatusOut)
+@router.get("/status/{supertxHash}", response_model=StatusOut | dict[str, Any])
 async def get_status(supertxHash: str) -> dict[str, Any]:
     return await get_biconomy_status(supertxHash)

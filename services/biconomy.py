@@ -44,22 +44,15 @@ async def post_biconomy_quote(
     """Execute a Biconomy quote with the provided payload."""
     endpoint = url or settings.biconomy_execute
     request_headers = headers or settings.biconomy_header
-
     payload = {
         **data.quote,
         "payloadToSign": data.payload_to_sign,
     }
-
     async with httpx.AsyncClient() as client:
         try:
             return await post(client, endpoint, payload, request_headers)
-        except httpx.HTTPError as e:
-            raise HTTPException(
-                status_code=502,
-                detail=f"Failed to execute quote on Biconomy: {str(e)}",
-            ) from e
         except Exception as e:
             raise HTTPException(
-                status_code=500,
-                detail=f"Unexpected error while executing quote: {str(e)}",
+                status_code=e.status_code,
+                detail=e.response.text,
             ) from e

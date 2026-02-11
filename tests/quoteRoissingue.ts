@@ -71,10 +71,13 @@ async function main() {
   const result = await execRes.json();
 
   console.log("Supertx Hash:", result.supertxHash);
-  console.log(
-    "MEE Explorer:",
-    `https://meescan.biconomy.io/details/${result.supertxHash}`,
-  );
+
+  // TODO: Await like 5 seconds
+  const getStatus = await fetch("http://127.0.0.1:8000/v1/status/", {
+    method: "GET",
+  });
+
+  // TODO: Refetch to get the status
 }
 
 main().catch(console.error);
