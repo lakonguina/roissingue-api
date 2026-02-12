@@ -40,7 +40,24 @@ def _seed_chains() -> list[Chain]:
     return [
         Chain(id=1, name="Ethereum", slug="eth"),
         Chain(id=8453, name="Base", slug="base"),
+        Chain(id=137, name="Polygon", slug="polygon"),
+        Chain(id=42161, name="Arbitrum", slug="arbitrum"),
         Chain(id=10, name="Optimism", slug="optimism"),
+        Chain(id=56, name="BNB Smart Chain", slug="bsc"),
+        Chain(id=146, name="Sonic", slug="sonic"),
+        Chain(id=534352, name="Scroll", slug="scroll"),
+        Chain(id=100, name="Gnosis", slug="gnosis"),
+        Chain(id=43114, name="Avalanche", slug="avalanche"),
+        Chain(id=33139, name="ApeChain", slug="apechain"),
+        Chain(id=999, name="HyperEVM", slug="hyperevm"),
+        Chain(id=1329, name="Sei", slug="sei"),
+        Chain(id=130, name="Unichain", slug="unichain"),
+        Chain(id=747474, name="Katana", slug="katana"),
+        Chain(id=1135, name="Lisk", slug="lisk"),
+        Chain(id=480, name="Worldchain", slug="worldchain"),
+        Chain(id=88888, name="Chiliz", slug="chiliz"),
+        Chain(id=143, name="Monad", slug="monad"),
+        Chain(id=9745, name="Plasma", slug="plasma"),
     ]
 
 
