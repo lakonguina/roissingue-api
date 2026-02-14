@@ -18,8 +18,8 @@ class Transaction(SQLModel, table=True):
     __tablename__ = "transactions"
     id: int | None = Field(default=None, primary_key=True)
     api_key_id: int = Field(foreign_key="api_keys.id", index=True)
-    status: str
-    address: str
+    hash: str
+    address: str = Field(index=True)
     extra_data: dict | None = Field(default=None, sa_type=JSON)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     api_key: "APIKey" = Relationship(back_populates="transactions")

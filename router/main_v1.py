@@ -125,7 +125,17 @@ async def post_execute(
     session: Session = Depends(get_session),
     _=Depends(get_api_key),
 ):
-    return await post_biconomy_quote(data)
+    response = await post_biconomy_quote(data)
+    if response.status_code == 200:
+        tx = Transaction(
+            api_key_id=api_key.id,
+            hash=response.supertxHash,
+            address=data.get("quote").get("ownerAddress"),
+            extra_data=data.quote,
+        )
+        session.add(tx)
+        session.commit()
+    return response
 
 
 @router.get("/tokens", response_model=list[TokenPublic])

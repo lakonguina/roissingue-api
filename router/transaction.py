@@ -37,10 +37,7 @@ class TransactionResponse(BaseModel):
 @transaction_router.get("/transactions", response_model=list[TransactionResponse])
 def list_transactions(
     api_key: Optional[str] = Query(None, description="Filter by API key value"),
-    status_filter: Optional[str] = Query(
-        None, alias="status", description="Filter by transaction status"
-    ),
-    wallet: Optional[str] = Query(None, description="Filter by wallet address"),
+    address: Optional[str] = Query(None, description="Filter by wallet address"),
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(20, ge=1, le=100, description="Number of items per page"),
     current_user: User = Depends(get_current_user),
@@ -64,10 +61,8 @@ def list_transactions(
     # Apply filters
     if api_key:
         stmt = stmt.where(APIKey.key == api_key)
-    if status_filter:
-        stmt = stmt.where(Transaction.status == status_filter)
-    if wallet:
-        stmt = stmt.where(Transaction.wallet == wallet)
+    if address:
+        stmt = stmt.where(Transaction.address == address)
     # Order by created_at descending
     stmt = stmt.order_by(Transaction.created_at.desc())
     # Pagination
@@ -80,8 +75,7 @@ def list_transactions(
             TransactionResponse(
                 id=tx.id,
                 api_key=api_key_obj.key,
-                status=tx.status,
-                wallet=tx.wallet,
+                address=tx.address,
                 extra_data=tx.extra_data,
                 created_at=tx.created_at.isoformat(),
             )
