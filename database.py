@@ -5,6 +5,9 @@ from pathlib import Path
 
 from sqlmodel import Session, SQLModel, create_engine
 
+import model.api_key
+import model.user
+
 # Database configuration
 DATABASE_FILE = Path("database.db")
 DATABASE_URL = f"sqlite:///{DATABASE_FILE}"
