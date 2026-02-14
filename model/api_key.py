@@ -18,4 +18,6 @@ class APIKey(SQLModel, table=True):
     key: str = Field(unique=True, index=True)
     name: str | None = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
+
     user: "User" = Relationship(back_populates="api_keys")
+    transactions: list["Transaction"] = Relationship(back_populates="api_key")

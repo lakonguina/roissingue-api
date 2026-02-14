@@ -4,8 +4,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from database import create_db_and_tables
+from router.api_key import api_key_router
 from router.auth import auth_router
 from router.main_v1 import router
+from router.transaction import transaction_router
 from seed import seed_blockchains_and_tokens
 
 app = FastAPI()
@@ -27,3 +29,5 @@ def on_startup():
 
 app.include_router(auth_router)
 app.include_router(router)
+app.include_router(api_key_router)
+app.include_router(transaction_router)
