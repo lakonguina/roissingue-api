@@ -1,6 +1,6 @@
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Body, Depends, Query
+from fastapi import APIRouter, Body, Depends, Query, Request
 from sqlmodel import Session
 
 from database import get_session
@@ -9,6 +9,7 @@ from model.execute import ExecuteIn, ExecuteOut
 from model.quote import Quote, QuotesBest, TokenQuote, TokenQuoteBySlug
 from model.status import StatusOut
 from model.token import TokenPublic
+from model.transaction import Transaction
 from queries.chain import get_chains
 from queries.token import get_tokens
 from services.biconomy import get_biconomy_status, post_biconomy_quote
@@ -122,19 +123,19 @@ async def post_execute(
             }
         ),
     ],
+    request: Request,
     session: Session = Depends(get_session),
     _=Depends(get_api_key),
 ):
     response = await post_biconomy_quote(data)
-    if response.status_code == 200:
-        tx = Transaction(
-            api_key_id=api_key.id,
-            hash=response.supertxHash,
-            address=data.get("quote").get("ownerAddress"),
-            extra_data=data.quote,
-        )
-        session.add(tx)
-        session.commit()
+    tx = Transaction(
+        api_key_id=request.state.api_key.id,
+        hash=response.get("supertxHash"),
+        address=data.quote.get("ownerAddress"),
+        extra_data=data.quote,
+    )
+    session.add(tx)
+    session.commit()
     return response
 
 

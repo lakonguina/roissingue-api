@@ -26,21 +26,26 @@ interface QuoteResponse {
 }
 
 async function main() {
-  const res = await fetch("http://127.0.0.1:8000/v1/quote", {
+  const res = await fetch("http://127.0.0.1:8001/v1/quote", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "X-API-KEY": "UHlWc_jdJGdoZCMzj7F1-VAaG7QihTjzMqfRjzyAZfM",
+    },
     body: JSON.stringify({
       fromToken: {
-        chainId: 10,
-        address: "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",
+        chainId: 8453,
+        address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
         amount: "100000",
       },
-      toToken: { slug: "wrapped-ethereum" },
-      feeToken: {
-        chainId: 10,
-        address: "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",
+      toToken: {
+        chainId: 8453,
+        address: "0x4200000000000000000000000000000000000006",
       },
-      allowChains: [10, 8453],
+      feeToken: {
+        chainId: 8453,
+        address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+      },
       fromAddress: account.address,
       toAddress: account.address,
     }),
@@ -60,9 +65,12 @@ async function main() {
     payloadToSign[i] = { ...payloadToSign[i], signature };
   }
 
-  const execRes = await fetch("http://127.0.0.1:8000/v1/execute", {
+  const execRes = await fetch("http://127.0.0.1:8001/v1/execute", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "X-API-KEY": "UHlWc_jdJGdoZCMzj7F1-VAaG7QihTjzMqfRjzyAZfM",
+    },
     body: JSON.stringify({ quote: quoteResponse, payloadToSign }),
   });
 
@@ -70,14 +78,7 @@ async function main() {
 
   const result = await execRes.json();
 
-  console.log("Supertx Hash:", result.supertxHash);
-
-  // TODO: Await like 5 seconds
-  const getStatus = await fetch("http://127.0.0.1:8000/v1/status/", {
-    method: "GET",
-  });
-
-  // TODO: Refetch to get the status
+  console.log("Supertx Hash:", result);
 }
 
 main().catch(console.error);

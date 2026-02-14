@@ -53,6 +53,6 @@ async def post_biconomy_quote(
             return await post(client, endpoint, payload, request_headers)
         except Exception as e:
             raise HTTPException(
-                status_code=e.status_code,
-                detail=e.response.text,
+                status_code=e.response.status_code,
+                detail=e.response.json()["message"],
             ) from e

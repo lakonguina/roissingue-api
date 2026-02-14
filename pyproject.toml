@@ -1,7 +1,7 @@
 [project]
 name = "roissingue-api"
 version = "0.1.0"
-description = "Add your description here"
+description = "Unified API for gasless, multi-chain token swaps"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
