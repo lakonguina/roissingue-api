@@ -19,6 +19,7 @@ from services.quote import (
     get_token_addresses_by_slug,
     quote_tokens,
 )
+from services.user import get_api_key
 
 router = APIRouter(prefix="/v1")
 
@@ -73,6 +74,7 @@ async def post_quote(
         ),
     ],
     session: Session = Depends(get_session),
+    _=Depends(get_api_key),
 ):
     # Assert chains are supported by roissingue + biconomy
     chain_ids = [quote.from_token.chain_id, quote.fee_token.chain_id]
@@ -121,6 +123,7 @@ async def post_execute(
         ),
     ],
     session: Session = Depends(get_session),
+    _=Depends(get_api_key),
 ):
     return await post_biconomy_quote(data)
 
@@ -129,15 +132,22 @@ async def post_execute(
 async def get_token(
     session: Session = Depends(get_session),
     chain_ids: Annotated[set[int] | None, Query()] = None,
+    _=Depends(get_api_key),
 ):
     return get_tokens(session, chain_ids)
 
 
 @router.get("/chains", response_model=list[ChainOut])
-async def get_chain(session: Session = Depends(get_session)):
+async def get_chain(
+    session: Session = Depends(get_session),
+    _=Depends(get_api_key),
+):
     return get_chains(session)
 
 
 @router.get("/status/{supertxHash}", response_model=StatusOut | dict[str, Any])
-async def get_status(supertxHash: str) -> dict[str, Any]:
+async def get_status(
+    supertxHash: str,
+    _=Depends(get_api_key),
+) -> dict[str, Any]:
     return await get_biconomy_status(supertxHash)
